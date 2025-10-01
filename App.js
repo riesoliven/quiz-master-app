@@ -1,20 +1,33 @@
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+
+import MainMenuScreen from './src/screens/MainMenuScreen';
+import HelperSelectScreen from './src/screens/HelperSelectScreen';
+import QuizGameScreen from './src/screens/QuizGameScreen';
+import ResultsScreen from './src/screens/ResultsScreen';
+
+const Stack = createStackNavigator();
 
 export default function App() {
   return (
-    <View style={styles.container}>
-      <Text>Open up App.js to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <>
+      <StatusBar style="light" backgroundColor="#3a4a5a" />
+      <NavigationContainer>
+        <Stack.Navigator
+          initialRouteName="MainMenu"
+          screenOptions={{
+            headerShown: false,
+            cardStyle: { backgroundColor: '#3a4a5a' }
+          }}
+        >
+          <Stack.Screen name="MainMenu" component={MainMenuScreen} />
+          <Stack.Screen name="HelperSelect" component={HelperSelectScreen} />
+          <Stack.Screen name="QuizGame" component={QuizGameScreen} />
+	  <Stack.Screen name="Results" component={ResultsScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
