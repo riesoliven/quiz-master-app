@@ -9,9 +9,35 @@ import {
 } from 'react-native';
 import { getQuizQuestions } from '../data/questions';
 
+// Shuffle answers while maintaining correct answer tracking
+const shuffleAnswers = (question) => {
+  const answersWithIndices = question.answers.map((answer, index) => ({
+    answer,
+    originalIndex: index
+  }));
+
+  // Fisher-Yates shuffle
+  for (let i = answersWithIndices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [answersWithIndices[i], answersWithIndices[j]] = [answersWithIndices[j], answersWithIndices[i]];
+  }
+
+  // Extract shuffled answers and find new correct index
+  const shuffledAnswers = answersWithIndices.map(item => item.answer);
+  const newCorrectIndex = answersWithIndices.findIndex(
+    item => item.originalIndex === question.correct
+  );
+
+  return {
+    ...question,
+    answers: shuffledAnswers,
+    correct: newCorrectIndex
+  };
+};
+
 const QuizGameScreen = ({ route, navigation }) => {
   const { helpers } = route.params;
-  const [questions] = useState(getQuizQuestions());
+  const [questions] = useState(() => getQuizQuestions().map(q => shuffleAnswers(q)));
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [score, setScore] = useState(0);
   const [streak, setStreak] = useState(0);
