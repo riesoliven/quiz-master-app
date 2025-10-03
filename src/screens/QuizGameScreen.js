@@ -8,6 +8,7 @@ import {
   Animated
 } from 'react-native';
 import { getQuizQuestions } from '../data/questions';
+import { calculateBonusPoints, getSubjectOfTheDay } from '../services/dailySubject';
 
 // Shuffle answers while maintaining correct answer tracking
 const shuffleAnswers = (question) => {
@@ -40,6 +41,7 @@ const QuizGameScreen = ({ route, navigation }) => {
   const [questions] = useState(() => getQuizQuestions().map(q => shuffleAnswers(q)));
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [score, setScore] = useState(0);
+  const [correctAnswers, setCorrectAnswers] = useState(0);
   const [streak, setStreak] = useState(0);
   const [helperUsed, setHelperUsed] = useState(false);
   const [totalTimer, setTotalTimer] = useState(90); // 90 seconds for entire quiz
@@ -48,8 +50,10 @@ const QuizGameScreen = ({ route, navigation }) => {
   const [helperSuggestion, setHelperSuggestion] = useState(null);
   const [quizComplete, setQuizComplete] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(1));
+  const [dailySubject] = useState(getSubjectOfTheDay());
 
   const question = questions[currentQuestion];
+  const isBonusQuestion = question.subject === dailySubject.subject;
   const questionNumber = currentQuestion + 1;
   const difficulty = 
     questionNumber <= 5 ? 'EASY' : 
@@ -106,7 +110,7 @@ const QuizGameScreen = ({ route, navigation }) => {
 
   const handleTimeUp = () => {
   setQuizComplete(true);
-  
+
   setTimeout(() => {
     navigation.replace('Results', {  // Changed to 'Results'
       finalScore: score,
@@ -114,7 +118,7 @@ const QuizGameScreen = ({ route, navigation }) => {
       timeRemaining: 0,
       timeBonus: 0,
       completionBonus: 0,
-      questionsAnswered: currentQuestion,
+      questionsAnswered: correctAnswers,
       totalQuestions: questions.length,
       message: 'Time\'s Up!'
     });
@@ -123,21 +127,24 @@ const QuizGameScreen = ({ route, navigation }) => {
 
   const handleAnswer = (answerIndex) => {
     if (isAnswered) return;
-    
+
     setSelectedAnswer(answerIndex);
     setIsAnswered(true);
-    
+
     const isCorrect = answerIndex === question.correct;
-    
+
     if (isCorrect) {
-      // Add base points for correct answer
+      // Calculate points with daily subject bonus
       const basePoints = question.points;
-      setScore(prev => prev + basePoints);
-      
+      const bonusCalc = calculateBonusPoints(basePoints, question.subject);
+
+      setScore(prev => prev + bonusCalc.total);
+      setCorrectAnswers(prev => prev + 1);
+
       // Increase streak
       const newStreak = streak + 1;
       setStreak(newStreak);
-      
+
       // Add time bonus based on streak
       const timeBonus = getTimeBonus(newStreak);
       if (timeBonus > 0) {
@@ -146,7 +153,7 @@ const QuizGameScreen = ({ route, navigation }) => {
     } else {
       setStreak(0); // Reset streak on wrong answer
     }
-    
+
     // Move to next question after delay
     setTimeout(() => {
       moveToNext();
@@ -167,12 +174,12 @@ const QuizGameScreen = ({ route, navigation }) => {
 
   const handleQuizComplete = () => {
   setQuizComplete(true);
-  
+
   // Calculate final score with time bonus
   const timeBonus = totalTimer * 10;
   const completionBonus = 500;
   const finalScore = score + timeBonus + completionBonus;
-  
+
   setTimeout(() => {
     navigation.replace('Results', {  // Changed to 'Results' instead of 'MainMenu'
       finalScore: finalScore,
@@ -180,7 +187,7 @@ const QuizGameScreen = ({ route, navigation }) => {
       timeRemaining: totalTimer,
       timeBonus: timeBonus,
       completionBonus: completionBonus,
-      questionsAnswered: questions.length,
+      questionsAnswered: correctAnswers,
       totalQuestions: questions.length,
       message: 'Quiz Complete!'
     });
@@ -299,16 +306,26 @@ const QuizGameScreen = ({ route, navigation }) => {
       )}
 
       {/* Question Card */}
-      <View style={styles.questionCard}>
+      <View style={[styles.questionCard, isBonusQuestion && styles.bonusQuestionCard]}>
+        {isBonusQuestion && (
+          <View style={styles.bonusBanner}>
+            <Text style={styles.bonusBannerText}>⭐ SUBJECT OF THE DAY - +20% BONUS! ⭐</Text>
+          </View>
+        )}
         <View style={styles.questionHeader}>
-          <View style={styles.subjectBadge}>
+          <View style={[styles.subjectBadge, isBonusQuestion && styles.bonusSubjectBadge]}>
             <Text style={styles.subjectText}>{question.icon} {question.subject}</Text>
           </View>
           <View style={styles.difficultyBadge}>
             <Text style={[styles.difficultyText, styles[`difficulty${difficulty}`]]}>
               {difficulty}
             </Text>
-            <Text style={styles.pointsText}>{question.points} pts</Text>
+            <Text style={styles.pointsText}>
+              {question.points} pts
+              {isBonusQuestion && (
+                <Text style={styles.bonusPointsText}> (+{Math.floor(question.points * 0.20)})</Text>
+              )}
+            </Text>
           </View>
         </View>
         
@@ -350,8 +367,13 @@ const QuizGameScreen = ({ route, navigation }) => {
             selectedAnswer === question.correct ? styles.feedbackCorrect : styles.feedbackWrong
           ]}>
             <Text style={styles.feedbackText}>
-              {selectedAnswer === question.correct 
-                ? `✅ Correct! +${question.points} pts` 
+              {selectedAnswer === question.correct
+                ? (() => {
+                    const bonusCalc = calculateBonusPoints(question.points, question.subject);
+                    return bonusCalc.isBonusQuestion
+                      ? `✅ Correct! +${question.points} pts + ${bonusCalc.bonus} BONUS = ${bonusCalc.total} pts!`
+                      : `✅ Correct! +${question.points} pts`;
+                  })()
                 : '❌ Wrong Answer - Streak Lost!'}
             </Text>
             {selectedAnswer === question.correct && getTimeBonus(streak) > 0 && (
@@ -517,6 +539,35 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: '#6a7a8a',
+  },
+  bonusQuestionCard: {
+    backgroundColor: 'rgba(250, 202, 58, 0.15)',
+    borderWidth: 2,
+    borderColor: '#faca3a',
+  },
+  bonusBanner: {
+    backgroundColor: '#faca3a',
+    marginHorizontal: -20,
+    marginTop: -20,
+    marginBottom: 15,
+    paddingVertical: 8,
+    borderTopLeftRadius: 15,
+    borderTopRightRadius: 15,
+  },
+  bonusBannerText: {
+    color: '#3a4a5a',
+    fontSize: 12,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  bonusSubjectBadge: {
+    backgroundColor: 'rgba(250, 202, 58, 0.3)',
+    borderWidth: 1,
+    borderColor: '#faca3a',
+  },
+  bonusPointsText: {
+    color: '#4aca4a',
+    fontSize: 12,
   },
   questionHeader: {
     flexDirection: 'row',

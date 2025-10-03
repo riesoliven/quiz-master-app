@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,40 +12,40 @@ import {
   Alert
 } from 'react-native';
 import { verifyAdminPassword } from '../services/auth';
+import { getSubjectOfTheDay } from '../services/dailySubject';
+import { useAuth } from '../context/AuthContext';
+import { getTopLeaderboard } from '../services/leaderboardService';
 
 const { width, height } = Dimensions.get('window');
 
 const MainMenuScreen = ({ navigation }) => {
   // ALL state hooks MUST be inside the component
+  const { userProfile, logout } = useAuth();
   const [secretTaps, setSecretTaps] = useState(0);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
+  const [dailySubject] = useState(getSubjectOfTheDay());
+  const [leaderboard, setLeaderboard] = useState([]);
   
-  const [userData] = useState({
-    username: 'QuizMaster',
-    level: 15,
-    rating: 78,
-    percentile: 82,
-    avatar: '🧑‍🎓',
-    coins: 2450,
-    gems: 45,
-    topSubjects: [
-      { name: 'Chemistry', accuracy: 92, icon: '⚗️' },
-      { name: 'Mathematics', accuracy: 85, icon: '🔢' },
-      { name: 'Physics', accuracy: 73, icon: '⚛️' }
-    ],
-    weakSubject: { name: 'Biology', accuracy: 61, icon: '🧬' },
-    stats: {
-      wins: 142,
-      bestStreak: 23,
-      accuracy: 94
-    },
-    perks: {
-      speedDemon: 12,
-      memoryBank: 8,
-      luckyGuess: 5
-    }
-  });
+  useEffect(() => {
+    loadLeaderboard();
+  }, []);
+
+  const loadLeaderboard = async () => {
+    const topPlayers = await getTopLeaderboard(10);
+    setLeaderboard(topPlayers);
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Logout', onPress: logout, style: 'destructive' }
+      ]
+    );
+  };
 
   const handleSecretTap = () => {
     const newTaps = secretTaps + 1;
@@ -85,80 +85,37 @@ const MainMenuScreen = ({ navigation }) => {
               <View style={styles.playerProfile}>
                 <TouchableOpacity onPress={handleSecretTap} activeOpacity={0.9}>
                   <View style={styles.avatarFrame}>
-                    <Text style={styles.avatar}>{userData.avatar}</Text>
+                    <Text style={styles.avatar}>{userProfile?.avatar || '🧑‍🎓'}</Text>
                     <View style={styles.levelIndicator}>
-                      <Text style={styles.levelText}>{userData.level}</Text>
+                      <Text style={styles.levelText}>{userProfile?.level || 1}</Text>
                     </View>
                   </View>
                 </TouchableOpacity>
-                
+
                 <View style={styles.playerDetails}>
-                  <Text style={styles.playerName}>{userData.username}</Text>
+                  <Text style={styles.playerName}>{userProfile?.username || 'Player'}</Text>
                   <Text style={styles.ratingText}>
-                    RATING: <Text style={styles.ratingPercent}>{userData.rating}%</Text>
+                    GAMES: <Text style={styles.ratingPercent}>{userProfile?.totalGamesPlayed || 0}</Text>
                   </Text>
-                  <Text style={styles.betterThan}>
-                    BETTER THAN: <Text style={styles.percentileText}>{userData.percentile}%</Text> of all players
-                  </Text>
+                  <TouchableOpacity onPress={handleLogout}>
+                    <Text style={styles.logoutText}>🚪 Logout</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
 
-              <View style={styles.subjectExpertise}>
-                <Text style={styles.expertiseHeader}>TOP SUBJECTS:</Text>
-                {userData.topSubjects.map((subject, index) => (
-                  <View key={index} style={styles.subjectStat}>
-                    <View style={styles.subjectIcon}>
-                      <Text style={styles.iconText}>{subject.icon}</Text>
-                    </View>
-                    <View style={styles.subjectInfo}>
-                      <Text style={styles.subjectName}>{subject.name}</Text>
-                      <Text style={styles.subjectAccuracy}>{subject.accuracy}% accuracy</Text>
-                    </View>
-                    <View style={styles.subjectRank}>
-                      <Text style={styles.rankText}>#{index + 1}</Text>
-                    </View>
-                  </View>
-                ))}
-                
-                <View style={styles.weaknessBox}>
-                  <Text style={styles.weaknessLabel}>⚠️ Weak:</Text>
-                  <Text style={styles.weaknessText}>
-                    {userData.weakSubject.name} ({userData.weakSubject.accuracy}%)
-                  </Text>
+              <View style={styles.playerStats}>
+                <Text style={styles.expertiseHeader}>YOUR STATS:</Text>
+                <View style={styles.statRow}>
+                  <Text style={styles.statLabel}>💰 Coins:</Text>
+                  <Text style={styles.statValue}>{userProfile?.coins || 0}</Text>
                 </View>
-              </View>
-
-              <View style={styles.perksSection}>
-                <Text style={styles.perksLabel}>PERKS:</Text>
-                
-                <View style={styles.perkBar}>
-                  <View style={styles.perkHeader}>
-                    <Text style={styles.perkName}>Speed Demon</Text>
-                    <Text style={styles.perkLevel}>{userData.perks.speedDemon}%</Text>
-                  </View>
-                  <View style={styles.perkProgress}>
-                    <View style={[styles.perkFill, { width: `${userData.perks.speedDemon}%` }]} />
-                  </View>
+                <View style={styles.statRow}>
+                  <Text style={styles.statLabel}>💎 Gems:</Text>
+                  <Text style={styles.statValue}>{userProfile?.gems || 0}</Text>
                 </View>
-
-                <View style={styles.perkBar}>
-                  <View style={styles.perkHeader}>
-                    <Text style={styles.perkName}>Memory Bank</Text>
-                    <Text style={styles.perkLevel}>{userData.perks.memoryBank}%</Text>
-                  </View>
-                  <View style={styles.perkProgress}>
-                    <View style={[styles.perkFill, { width: `${userData.perks.memoryBank * 5}%` }]} />
-                  </View>
-                </View>
-
-                <View style={styles.perkBar}>
-                  <View style={styles.perkHeader}>
-                    <Text style={styles.perkName}>Lucky Guess</Text>
-                    <Text style={styles.perkLevel}>{userData.perks.luckyGuess}%</Text>
-                  </View>
-                  <View style={styles.perkProgress}>
-                    <View style={[styles.perkFill, { width: `${userData.perks.luckyGuess * 6}%` }]} />
-                  </View>
+                <View style={styles.statRow}>
+                  <Text style={styles.statLabel}>🎮 Games:</Text>
+                  <Text style={styles.statValue}>{userProfile?.totalGamesPlayed || 0}</Text>
                 </View>
               </View>
             </View>
@@ -167,37 +124,48 @@ const MainMenuScreen = ({ navigation }) => {
               <Text style={styles.newsHeader}>NEWS</Text>
               <Text style={styles.newsTitle}>Season 7 Championship!</Text>
               <Text style={styles.newsContent}>
-                Top 100 players qualify for exclusive rewards. 
+                Top 100 players qualify for exclusive rewards.
                 New subjects coming soon: Geography & History!
+              </Text>
+            </View>
+
+            {/* Subject of the Day */}
+            <View style={styles.dailySubjectBox}>
+              <Text style={styles.dailySubjectHeader}>⭐ SUBJECT OF THE DAY</Text>
+              <View style={styles.dailySubjectContent}>
+                <Text style={styles.dailySubjectIcon}>{dailySubject.icon}</Text>
+                <View style={styles.dailySubjectInfo}>
+                  <Text style={styles.dailySubjectName}>{dailySubject.subject}</Text>
+                  <Text style={styles.dailySubjectBonus}>
+                    🎁 +20% Bonus Points!
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.dailySubjectHint}>
+                Answer {dailySubject.subject} questions correctly for extra points today!
               </Text>
             </View>
           </View>
 
           {/* Right Panel */}
           <View style={styles.rightPanel}>
-            <View style={styles.leaderboardBox}>
-              <Text style={styles.leaderboardHeader}>High Scores: Top 10</Text>
-              <View style={styles.leaderItem}>
-                <Text style={styles.leaderRank}>1</Text>
-                <Text style={styles.leaderName}>AlphaGenius</Text>
-                <Text style={styles.leaderScore}>2847</Text>
-              </View>
-              <View style={styles.leaderItem}>
-                <Text style={styles.leaderRank}>2</Text>
-                <Text style={styles.leaderName}>BrainStorm</Text>
-                <Text style={styles.leaderScore}>2693</Text>
-              </View>
-              <View style={styles.leaderItem}>
-                <Text style={styles.leaderRank}>3</Text>
-                <Text style={styles.leaderName}>QuizNinja</Text>
-                <Text style={styles.leaderScore}>2541</Text>
-              </View>
-              <View style={[styles.leaderItem, styles.yourRank]}>
-                <Text style={styles.leaderRank}>16</Text>
-                <Text style={styles.leaderName}>You</Text>
-                <Text style={styles.leaderScore}>1853</Text>
-              </View>
-            </View>
+            <TouchableOpacity
+              style={styles.leaderboardBox}
+              onPress={() => navigation.navigate('Leaderboard')}
+            >
+              <Text style={styles.leaderboardHeader}>🏆 High Scores: Top 10</Text>
+              {leaderboard.slice(0, 4).map((player, index) => (
+                <View key={player.id} style={[styles.leaderItem, player.userId === userProfile?.id && styles.yourRank]}>
+                  <Text style={styles.leaderRank}>{index + 1}</Text>
+                  <Text style={styles.leaderName}>{player.username}</Text>
+                  <Text style={styles.leaderScore}>{player.highScore}</Text>
+                </View>
+              ))}
+              {leaderboard.length === 0 && (
+                <Text style={styles.emptyLeaderboard}>No scores yet!</Text>
+              )}
+              <Text style={styles.viewFullLeaderboard}>Tap to view full leaderboard →</Text>
+            </TouchableOpacity>
 
             <Pressable 
               style={({ pressed }) => [
@@ -351,6 +319,31 @@ const styles = StyleSheet.create({
   },
   percentileText: {
     color: '#4aca4a',
+    fontWeight: 'bold',
+  },
+  logoutText: {
+    color: '#ca4a4a',
+    fontSize: 12,
+    marginTop: 5,
+  },
+  playerStats: {
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#5a6a7a',
+  },
+  statRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  statLabel: {
+    color: '#9aaa9a',
+    fontSize: 12,
+  },
+  statValue: {
+    color: '#faca3a',
+    fontSize: 12,
     fontWeight: 'bold',
   },
   subjectExpertise: {
@@ -516,6 +509,19 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 5,
   },
+  emptyLeaderboard: {
+    color: '#6a7a8a',
+    fontSize: 12,
+    textAlign: 'center',
+    padding: 20,
+  },
+  viewFullLeaderboard: {
+    color: '#faca3a',
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 10,
+    fontStyle: 'italic',
+  },
   playButton: {
     backgroundColor: '#4a9a4a',
     paddingVertical: 15,
@@ -557,6 +563,51 @@ const styles = StyleSheet.create({
   tertiaryButtonText: {
     color: '#9aaa9a',
     fontSize: 12,
+  },
+  dailySubjectBox: {
+    backgroundColor: 'rgba(250, 202, 58, 0.15)',
+    borderRadius: 12,
+    padding: 15,
+    marginTop: 15,
+    borderWidth: 2,
+    borderColor: '#faca3a',
+  },
+  dailySubjectHeader: {
+    color: '#faca3a',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  dailySubjectContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  dailySubjectIcon: {
+    fontSize: 40,
+    marginRight: 15,
+  },
+  dailySubjectInfo: {
+    flex: 1,
+  },
+  dailySubjectName: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  dailySubjectBonus: {
+    color: '#4aca4a',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  dailySubjectHint: {
+    color: '#9aaa9a',
+    fontSize: 11,
+    lineHeight: 16,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   modalOverlay: {
     flex: 1,

@@ -7,33 +7,44 @@ import {
   ScrollView,
   TextInput,
   Animated,
-  Share
+  Share,
+  Alert
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../context/AuthContext';
+import {
+  updateHighScore,
+  getUserHighScore,
+  getUserRank,
+  saveScoreRecord
+} from '../services/leaderboardService';
 
 const ResultsScreen = ({ route, navigation }) => {
-  const { 
-    finalScore, 
-    baseScore, 
-    timeRemaining, 
-    timeBonus, 
+  const {
+    finalScore,
+    baseScore,
+    timeRemaining,
+    timeBonus,
     completionBonus,
     questionsAnswered,
     totalQuestions,
-    message 
+    message
   } = route.params;
 
+  const { user, userProfile, refreshUserProfile } = useAuth();
   const [playerRank, setPlayerRank] = useState(0);
   const [totalPlayers, setTotalPlayers] = useState(0);
   const [comment, setComment] = useState('');
   const [highScores, setHighScores] = useState([]);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [scaleAnim] = useState(new Animated.Value(0.5));
+  const [isNewHighScore, setIsNewHighScore] = useState(false);
+  const [previousHighScore, setPreviousHighScore] = useState(0);
 
   useEffect(() => {
     // Load high scores and calculate rank
     loadHighScores();
-    
+
     // Animate entrance
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -51,31 +62,49 @@ const ResultsScreen = ({ route, navigation }) => {
 
   const loadHighScores = async () => {
     try {
-      const scores = await AsyncStorage.getItem('highScores');
-      const parsedScores = scores ? JSON.parse(scores) : [];
-      
-      // Add current score
-      const newScore = {
+      if (!user) return;
+
+      // Get previous high score
+      const prevHighScore = await getUserHighScore(user.uid);
+      setPreviousHighScore(prevHighScore);
+
+      // Check if this is a new high score
+      const isNew = finalScore > prevHighScore;
+      console.log('High Score Check:', {
+        finalScore,
+        prevHighScore,
+        isNewHighScore: isNew
+      });
+      setIsNewHighScore(isNew);
+
+      // If it's a new high score, update it in Firestore (without message)
+      // User can optionally add a message later
+      if (isNew && userProfile) {
+        await updateHighScore(
+          user.uid,
+          finalScore,
+          '', // Empty message for now, user can add later
+          userProfile.username,
+          userProfile.avatar
+        );
+      }
+
+      // Save score record
+      await saveScoreRecord(user.uid, {
         score: finalScore,
-        date: new Date().toISOString(),
+        baseScore,
+        timeBonus,
+        completionBonus,
         questionsAnswered,
-        timeRemaining
-      };
-      
-      parsedScores.push(newScore);
-      parsedScores.sort((a, b) => b.score - a.score);
-      
-      // Keep only top 100
-      const top100 = parsedScores.slice(0, 100);
-      
-      // Find player rank
-      const rank = top100.findIndex(s => s.score === finalScore) + 1;
-      setPlayerRank(rank);
-      setTotalPlayers(top100.length);
-      setHighScores(top100.slice(0, 5)); // Show top 5
-      
-      // Save updated scores
-      await AsyncStorage.setItem('highScores', JSON.stringify(top100));
+        totalQuestions,
+        timeRemaining,
+      });
+
+      // Get rank
+      const rankData = await getUserRank(user.uid);
+      setPlayerRank(rankData.rank);
+      setTotalPlayers(rankData.total);
+
     } catch (error) {
       console.error('Error loading scores:', error);
     }
@@ -102,22 +131,37 @@ const ResultsScreen = ({ route, navigation }) => {
   };
 
   const saveHighScore = async () => {
-    // In a real app, this would save to a backend
+    if (!user || !userProfile) {
+      Alert.alert('Error', 'You must be logged in to save scores');
+      return;
+    }
+
+    if (!isNewHighScore) {
+      // Just navigate back if not a new high score
+      navigation.navigate('MainMenu');
+      return;
+    }
+
     try {
-      const scoreData = {
-        score: finalScore,
-        comment: comment,
-        date: new Date().toISOString(),
-        questionsAnswered,
-        timeRemaining
-      };
-      
-      // Here you would send to backend
-      console.log('Saving score:', scoreData);
-      
-      navigation.navigate('MainMenu', { newHighScore: finalScore });
+      // Update the message if provided (score was already saved in loadHighScores)
+      if (comment && comment.trim() !== '') {
+        await updateHighScore(
+          user.uid,
+          finalScore,
+          comment.trim(),
+          userProfile.username,
+          userProfile.avatar
+        );
+      }
+
+      Alert.alert(
+        '🎉 New High Score!',
+        `Congratulations! You beat your previous high score of ${previousHighScore} points!`,
+        [{ text: 'Awesome!', onPress: () => navigation.navigate('MainMenu') }]
+      );
     } catch (error) {
-      console.error('Error saving score:', error);
+      console.error('Error saving message:', error);
+      Alert.alert('Error', 'Failed to save message');
     }
   };
 
@@ -166,16 +210,32 @@ const ResultsScreen = ({ route, navigation }) => {
           ))}
         </View>
 
-        {/* Results Card */}
-        <View style={styles.resultsCard}>
-          <Text style={styles.rankTitle}>You're number {playerRank}!</Text>
-          <Text style={styles.pointsText}>{finalScore} points</Text>
-          
-          <View style={styles.rankMessage}>
-            <Text style={[styles.rankMessageText, { color: getRankColor() }]}>
-              {getRankMessage()}
+        {/* New High Score Banner - Only show when it's actually a new personal best */}
+        {isNewHighScore && (
+          <View style={styles.newHighScoreBanner}>
+            <Text style={styles.newHighScoreText}>🎉 NEW PERSONAL BEST! 🎉</Text>
+            <Text style={styles.previousScoreText}>
+              Previous: {previousHighScore} pts → New: {finalScore} pts
+            </Text>
+            <Text style={styles.rankInfoText}>
+              Rank: #{playerRank} • Top {getPercentile()}%
             </Text>
           </View>
+        )}
+
+        {/* Regular Completion Banner - Show when NOT a new high score */}
+        {!isNewHighScore && (
+          <View style={styles.completionBanner}>
+            <Text style={styles.completionText}>Quiz Complete!</Text>
+            <Text style={styles.correctAnswersText}>
+              You got {questionsAnswered}/{totalQuestions} correct
+            </Text>
+          </View>
+        )}
+
+        {/* Results Card */}
+        <View style={styles.resultsCard}>
+          <Text style={styles.pointsText}>{finalScore} points</Text>
 
           {/* Score Breakdown */}
           <View style={styles.breakdown}>
@@ -205,41 +265,55 @@ const ResultsScreen = ({ route, navigation }) => {
           <View style={styles.statsGrid}>
             <View style={styles.statItem}>
               <Text style={styles.statValue}>{questionsAnswered}/{totalQuestions}</Text>
-              <Text style={styles.statLabel}>Questions</Text>
+              <Text style={styles.statLabel}>Correct</Text>
             </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>Top {getPercentile()}%</Text>
-              <Text style={styles.statLabel}>Percentile</Text>
-            </View>
+            {isNewHighScore && (
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>#{playerRank}</Text>
+                <Text style={styles.statLabel}>Rank</Text>
+              </View>
+            )}
             <View style={styles.statItem}>
               <Text style={styles.statValue}>{timeRemaining}s</Text>
               <Text style={styles.statLabel}>Time Left</Text>
             </View>
+            {isNewHighScore && (
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>Top {getPercentile()}%</Text>
+                <Text style={styles.statLabel}>Percentile</Text>
+              </View>
+            )}
           </View>
 
-          {/* Comment Section */}
-          <View style={styles.commentSection}>
-            <Text style={styles.commentLabel}>Leave a comment for the leaderboard:</Text>
-            <TextInput
-              style={styles.commentInput}
-              placeholder="GG! That was tough..."
-              placeholderTextColor="#6a7a8a"
-              value={comment}
-              onChangeText={setComment}
-              maxLength={100}
-              multiline
-            />
-            <Text style={styles.commentHint}>
-              Your message will appear on the high score list
-            </Text>
-          </View>
+          {/* Comment Section - Only show for new high scores */}
+          {isNewHighScore && (
+            <View style={styles.commentSection}>
+              <Text style={styles.commentLabel}>
+                🎊 Leave a victory message for the leaderboard (optional):
+              </Text>
+              <TextInput
+                style={styles.commentInput}
+                placeholder="GG! That was tough..."
+                placeholderTextColor="#6a7a8a"
+                value={comment}
+                onChangeText={setComment}
+                maxLength={100}
+                multiline
+              />
+              <Text style={styles.commentHint}>
+                Your message will appear as a speech bubble on the leaderboard (or leave blank)
+              </Text>
+            </View>
+          )}
 
-          {/* Save Button */}
-          <TouchableOpacity 
-            style={styles.saveButton}
+          {/* Save/Continue Button */}
+          <TouchableOpacity
+            style={[styles.saveButton, !isNewHighScore && styles.continueButton]}
             onPress={saveHighScore}
           >
-            <Text style={styles.saveButtonText}>Save High Score</Text>
+            <Text style={styles.saveButtonText}>
+              {isNewHighScore ? 'Save New High Score' : 'Continue'}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -305,6 +379,53 @@ const styles = StyleSheet.create({
     color: '#faca3a',
     fontSize: 48,
     fontWeight: 'bold',
+  },
+  newHighScoreBanner: {
+    backgroundColor: 'rgba(74, 202, 74, 0.3)',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: '#4aca4a',
+  },
+  newHighScoreText: {
+    color: '#4aca4a',
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  previousScoreText: {
+    color: 'white',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  rankInfoText: {
+    color: '#4aca4a',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  completionBanner: {
+    backgroundColor: 'rgba(90, 138, 202, 0.3)',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: '#5a8aca',
+  },
+  completionText: {
+    color: '#5a8aca',
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  correctAnswersText: {
+    color: 'white',
+    fontSize: 16,
+    textAlign: 'center',
   },
   progressDots: {
     flexDirection: 'row',
@@ -452,6 +573,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#6aca6a',
+  },
+  continueButton: {
+    backgroundColor: 'rgba(90, 138, 202, 0.5)',
+    borderColor: '#5a8aca',
   },
   saveButtonText: {
     color: 'white',
