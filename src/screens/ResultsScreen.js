@@ -8,7 +8,8 @@ import {
   TextInput,
   Animated,
   Share,
-  Alert
+  Alert,
+  BackHandler
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
@@ -59,6 +60,21 @@ const ResultsScreen = ({ route, navigation }) => {
       })
     ]).start();
   }, []);
+
+  // Handle back button - go to main menu
+  useEffect(() => {
+    const backAction = () => {
+      navigation.navigate('MainMenu');
+      return true; // Prevent default back behavior
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction
+    );
+
+    return () => backHandler.remove();
+  }, [navigation]);
 
   const loadHighScores = async () => {
     try {

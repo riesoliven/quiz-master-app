@@ -5,7 +5,9 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Animated
+  Animated,
+  Alert,
+  BackHandler
 } from 'react-native';
 import { getQuizQuestions } from '../data/questions';
 import { calculateBonusPoints, getSubjectOfTheDay } from '../services/dailySubject';
@@ -111,6 +113,32 @@ const QuizGameScreen = ({ route, navigation }) => {
       ).start();
     }
   }, [totalTimer <= 10]);
+
+  // Prevent back navigation during quiz
+  useEffect(() => {
+    const backAction = () => {
+      Alert.alert(
+        'Quit Quiz?',
+        'Are you sure you want to quit? Your progress will be lost.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Quit',
+            style: 'destructive',
+            onPress: () => navigation.navigate('MainMenu')
+          }
+        ]
+      );
+      return true; // Prevent default back behavior
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction
+    );
+
+    return () => backHandler.remove();
+  }, [navigation]);
 
   const handleTimeUp = () => {
   setQuizComplete(true);
