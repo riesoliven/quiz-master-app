@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import { getQuizQuestions } from '../data/questions';
 import { calculateBonusPoints, getSubjectOfTheDay } from '../services/dailySubject';
+import { useAuth } from '../context/AuthContext';
+import { updateUserStats } from '../services/userStatsService';
 
 // Shuffle answers while maintaining correct answer tracking
 const shuffleAnswers = (question) => {
@@ -38,10 +40,12 @@ const shuffleAnswers = (question) => {
 
 const QuizGameScreen = ({ route, navigation }) => {
   const { helpers } = route.params;
+  const { user } = useAuth();
   const [questions] = useState(() => getQuizQuestions().map(q => shuffleAnswers(q)));
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [score, setScore] = useState(0);
   const [correctAnswers, setCorrectAnswers] = useState(0);
+  const [questionResults, setQuestionResults] = useState([]); // Track results for stats
   const [streak, setStreak] = useState(0);
   const [helperUsed, setHelperUsed] = useState(false);
   const [totalTimer, setTotalTimer] = useState(90); // 90 seconds for entire quiz
@@ -133,6 +137,12 @@ const QuizGameScreen = ({ route, navigation }) => {
 
     const isCorrect = answerIndex === question.correct;
 
+    // Track result for stats
+    setQuestionResults(prev => [...prev, {
+      subject: question.subject,
+      isCorrect
+    }]);
+
     if (isCorrect) {
       // Calculate points with daily subject bonus
       const basePoints = question.points;
@@ -172,13 +182,18 @@ const QuizGameScreen = ({ route, navigation }) => {
     }
   };
 
-  const handleQuizComplete = () => {
+  const handleQuizComplete = async () => {
   setQuizComplete(true);
 
   // Calculate final score with time bonus
   const timeBonus = totalTimer * 10;
   const completionBonus = 500;
   const finalScore = score + timeBonus + completionBonus;
+
+  // Update user stats with question results
+  if (user && questionResults.length > 0) {
+    await updateUserStats(user.uid, questionResults);
+  }
 
   setTimeout(() => {
     navigation.replace('Results', {  // Changed to 'Results' instead of 'MainMenu'

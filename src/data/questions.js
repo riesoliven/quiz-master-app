@@ -215,17 +215,41 @@ export const questionDatabase = {
       { id: 'lit_imp_2', question: 'What was James Joyce\'s last novel?', answers: ['Ulysses', 'A Portrait of the Artist', 'Finnegans Wake', 'Dubliners'], correct: 2, explanation: 'Finnegans Wake was Joyce\'s final novel', points: 800 },
       { id: 'lit_imp_3', question: 'Who wrote "The Metamorphosis"?', answers: ['Franz Kafka', 'Albert Camus', 'Jean-Paul Sartre', 'Hermann Hesse'], correct: 0, explanation: 'Franz Kafka wrote The Metamorphosis', points: 800 }
     ]
+  },
+
+  Astronomy: {
+    icon: '🔭',
+    easy: [
+      { id: 'astro_easy_1', question: 'What is the closest star to Earth?', answers: ['Alpha Centauri', 'Sirius', 'The Sun', 'Proxima Centauri'], correct: 2, explanation: 'The Sun is Earth\'s closest star', points: 100 },
+      { id: 'astro_easy_2', question: 'How many planets are in our Solar System?', answers: ['7', '8', '9', '10'], correct: 1, explanation: 'There are 8 planets (Pluto is now a dwarf planet)', points: 100 },
+      { id: 'astro_easy_3', question: 'What is the largest planet in our Solar System?', answers: ['Saturn', 'Neptune', 'Jupiter', 'Uranus'], correct: 2, explanation: 'Jupiter is the largest planet', points: 100 }
+    ],
+    average: [
+      { id: 'astro_avg_1', question: 'How long does it take light from the Sun to reach Earth?', answers: ['8 seconds', '8 minutes', '8 hours', '8 days'], correct: 1, explanation: 'Sunlight takes about 8 minutes to reach Earth', points: 200 },
+      { id: 'astro_avg_2', question: 'What is the name of Mars\' largest moon?', answers: ['Deimos', 'Phobos', 'Titan', 'Europa'], correct: 1, explanation: 'Phobos is Mars\' largest moon', points: 200 },
+      { id: 'astro_avg_3', question: 'What galaxy is Earth located in?', answers: ['Andromeda', 'Milky Way', 'Triangulum', 'Whirlpool'], correct: 1, explanation: 'Earth is in the Milky Way galaxy', points: 200 }
+    ],
+    difficult: [
+      { id: 'astro_diff_1', question: 'What is the approximate age of the universe?', answers: ['4.5 billion years', '10.8 billion years', '13.8 billion years', '20.3 billion years'], correct: 2, explanation: 'The universe is approximately 13.8 billion years old', points: 400 },
+      { id: 'astro_diff_2', question: 'What is the Great Red Spot on Jupiter?', answers: ['A volcanic crater', 'A giant storm', 'An impact crater', 'A frozen ocean'], correct: 1, explanation: 'The Great Red Spot is a massive storm system', points: 400 },
+      { id: 'astro_diff_3', question: 'What is the brightest star in the night sky?', answers: ['Betelgeuse', 'Rigel', 'Sirius', 'Vega'], correct: 2, explanation: 'Sirius is the brightest star visible from Earth', points: 400 }
+    ],
+    impossible: [
+      { id: 'astro_imp_1', question: 'What is the Schwarzschild radius of a solar mass black hole?', answers: ['1 km', '3 km', '10 km', '30 km'], correct: 1, explanation: 'The Schwarzschild radius is about 3 km for a solar mass black hole', points: 800 },
+      { id: 'astro_imp_2', question: 'What percentage of the universe is dark energy?', answers: ['27%', '50%', '68%', '85%'], correct: 2, explanation: 'Dark energy makes up approximately 68% of the universe', points: 800 },
+      { id: 'astro_imp_3', question: 'What is the orbital period of Halley\'s Comet?', answers: ['50 years', '65 years', '76 years', '100 years'], correct: 2, explanation: 'Halley\'s Comet returns approximately every 76 years', points: 800 }
+    ]
   }
 };
 
 // Helper characters with updated subject skills
 export const helpers = [
-  { id: 1, name: 'Einstein', icon: '🧠', 'Arithmetic & Algebra': 85, 'Geometry & Trigonometry': 90, 'Statistics & Probability': 80, Physics: 95, Chemistry: 70, Biology: 40, History: 50, 'Sports & Entertainment': 20, Literature: 45 },
-  { id: 2, name: 'Darwin', icon: '🦜', 'Arithmetic & Algebra': 50, 'Geometry & Trigonometry': 45, 'Statistics & Probability': 70, Physics: 40, Chemistry: 65, Biology: 95, History: 60, 'Sports & Entertainment': 30, Literature: 55 },
-  { id: 3, name: 'Curie', icon: '⚗️', 'Arithmetic & Algebra': 75, 'Geometry & Trigonometry': 70, 'Statistics & Probability': 65, Physics: 85, Chemistry: 95, Biology: 50, History: 45, 'Sports & Entertainment': 25, Literature: 40 },
-  { id: 4, name: 'Turing', icon: '💻', 'Arithmetic & Algebra': 95, 'Geometry & Trigonometry': 88, 'Statistics & Probability': 90, Physics: 70, Chemistry: 45, Biology: 30, History: 40, 'Sports & Entertainment': 35, Literature: 50 },
-  { id: 5, name: 'Shakespeare', icon: '🎭', 'Arithmetic & Algebra': 40, 'Geometry & Trigonometry': 35, 'Statistics & Probability': 30, Physics: 25, Chemistry: 30, Biology: 35, History: 85, 'Sports & Entertainment': 75, Literature: 95 },
-  { id: 6, name: 'Aristotle', icon: '📜', 'Arithmetic & Algebra': 70, 'Geometry & Trigonometry': 75, 'Statistics & Probability': 60, Physics: 60, Chemistry: 55, Biology: 70, History: 90, 'Sports & Entertainment': 50, Literature: 85 }
+  { id: 1, name: 'Einstein', icon: '🧠', 'Arithmetic & Algebra': 85, 'Geometry & Trigonometry': 90, 'Statistics & Probability': 80, Physics: 95, Chemistry: 70, Biology: 40, History: 50, 'Sports & Entertainment': 20, Literature: 45, Astronomy: 90 },
+  { id: 2, name: 'Darwin', icon: '🦜', 'Arithmetic & Algebra': 50, 'Geometry & Trigonometry': 45, 'Statistics & Probability': 70, Physics: 40, Chemistry: 65, Biology: 95, History: 60, 'Sports & Entertainment': 30, Literature: 55, Astronomy: 55 },
+  { id: 3, name: 'Curie', icon: '⚗️', 'Arithmetic & Algebra': 75, 'Geometry & Trigonometry': 70, 'Statistics & Probability': 65, Physics: 85, Chemistry: 95, Biology: 50, History: 45, 'Sports & Entertainment': 25, Literature: 40, Astronomy: 75 },
+  { id: 4, name: 'Turing', icon: '💻', 'Arithmetic & Algebra': 95, 'Geometry & Trigonometry': 88, 'Statistics & Probability': 90, Physics: 70, Chemistry: 45, Biology: 30, History: 40, 'Sports & Entertainment': 35, Literature: 50, Astronomy: 65 },
+  { id: 5, name: 'Shakespeare', icon: '🎭', 'Arithmetic & Algebra': 40, 'Geometry & Trigonometry': 35, 'Statistics & Probability': 30, Physics: 25, Chemistry: 30, Biology: 35, History: 85, 'Sports & Entertainment': 75, Literature: 95, Astronomy: 40 },
+  { id: 6, name: 'Aristotle', icon: '📜', 'Arithmetic & Algebra': 70, 'Geometry & Trigonometry': 75, 'Statistics & Probability': 60, Physics: 60, Chemistry: 55, Biology: 70, History: 90, 'Sports & Entertainment': 50, Literature: 85, Astronomy: 80 }
 ];
 
 // Get quiz questions (14 questions, randomized from all subjects)

@@ -32,5 +32,6 @@ export { auth, firestore };
 export const COLLECTIONS = {
   USERS: 'users',
   LEADERBOARD: 'leaderboard',
-  SCORES: 'scores'
+  SCORES: 'scores',
+  USER_STATS: 'userStats'
 };

@@ -15,25 +15,34 @@ import { verifyAdminPassword } from '../services/auth';
 import { getSubjectOfTheDay } from '../services/dailySubject';
 import { useAuth } from '../context/AuthContext';
 import { getTopLeaderboard } from '../services/leaderboardService';
+import { getTopSubjects } from '../services/userStatsService';
 
 const { width, height } = Dimensions.get('window');
 
 const MainMenuScreen = ({ navigation }) => {
   // ALL state hooks MUST be inside the component
-  const { userProfile, logout } = useAuth();
+  const { user, userProfile, logout } = useAuth();
   const [secretTaps, setSecretTaps] = useState(0);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [dailySubject] = useState(getSubjectOfTheDay());
   const [leaderboard, setLeaderboard] = useState([]);
-  
+  const [topSubjects, setTopSubjects] = useState([]);
+
   useEffect(() => {
     loadLeaderboard();
-  }, []);
+    loadTopSubjects();
+  }, [user]);
 
   const loadLeaderboard = async () => {
     const topPlayers = await getTopLeaderboard(10);
     setLeaderboard(topPlayers);
+  };
+
+  const loadTopSubjects = async () => {
+    if (!user) return;
+    const subjects = await getTopSubjects(user.uid, 3);
+    setTopSubjects(subjects);
   };
 
   const handleLogout = () => {
@@ -118,7 +127,33 @@ const MainMenuScreen = ({ navigation }) => {
                   <Text style={styles.statValue}>{userProfile?.totalGamesPlayed || 0}</Text>
                 </View>
               </View>
+
+              <TouchableOpacity
+                style={styles.profileButton}
+                onPress={() => navigation.navigate('Profile')}
+              >
+                <Text style={styles.profileButtonText}>📊 View Full Profile</Text>
+              </TouchableOpacity>
             </View>
+
+            {/* Top 3 Subjects */}
+            {topSubjects.length > 0 && (
+              <View style={styles.topSubjectsBox}>
+                <Text style={styles.topSubjectsHeader}>🏅 YOUR TOP SUBJECTS</Text>
+                {topSubjects.map((subject, index) => (
+                  <View key={subject.name} style={styles.topSubjectRow}>
+                    <Text style={styles.topSubjectRank}>#{index + 1}</Text>
+                    <Text style={styles.topSubjectName}>{subject.name}</Text>
+                    <Text style={[
+                      styles.topSubjectAccuracy,
+                      { color: subject.accuracy >= 80 ? '#4aca4a' : subject.accuracy >= 60 ? '#caca4a' : '#ca8a4a' }
+                    ]}>
+                      {subject.accuracy}%
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
 
             <View style={styles.newsBox}>
               <Text style={styles.newsHeader}>NEWS</Text>
@@ -664,6 +699,55 @@ const styles = StyleSheet.create({
   modalButtonText: {
     color: 'white',
     fontSize: 14,
+    fontWeight: 'bold',
+  },
+  profileButton: {
+    backgroundColor: 'rgba(250, 202, 58, 0.2)',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    marginTop: 15,
+    borderWidth: 1,
+    borderColor: '#faca3a',
+  },
+  profileButtonText: {
+    color: '#faca3a',
+    fontSize: 13,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  topSubjectsBox: {
+    backgroundColor: 'rgba(58, 74, 90, 0.5)',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#4a5a6a',
+  },
+  topSubjectsHeader: {
+    color: '#faca3a',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  topSubjectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  topSubjectRank: {
+    color: '#faca3a',
+    fontSize: 12,
+    fontWeight: 'bold',
+    width: 30,
+  },
+  topSubjectName: {
+    color: 'white',
+    fontSize: 12,
+    flex: 1,
+  },
+  topSubjectAccuracy: {
+    fontSize: 12,
     fontWeight: 'bold',
   },
 });

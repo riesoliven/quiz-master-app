@@ -14,6 +14,7 @@ import {
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { collection, query, where, getDocs, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, firestore, COLLECTIONS } from '../services/firebase';
+import { initializeUserStats } from '../services/userStatsService';
 
 const AVATARS = ['🧑‍🎓', '👨‍💻', '👩‍🔬', '🧙‍♂️', '🦸‍♀️', '🤓', '🧑‍🚀', '👩‍🎨'];
 
@@ -86,6 +87,9 @@ const SignupScreen = ({ navigation }) => {
         message: '',
         lastUpdated: serverTimestamp(),
       });
+
+      // Initialize user stats
+      await initializeUserStats(userId);
 
       Alert.alert('Success', 'Account created successfully!');
       // Navigation is handled by AuthContext

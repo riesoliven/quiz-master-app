@@ -12,6 +12,7 @@ import QuizGameScreen from './src/screens/QuizGameScreen';
 import ResultsScreen from './src/screens/ResultsScreen';
 import QuestionManagerScreen from './src/screens/QuestionManagerScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 
 const Stack = createStackNavigator();
 
@@ -40,6 +41,7 @@ function AppNavigator() {
             <Stack.Screen name="Results" component={ResultsScreen} />
             <Stack.Screen name="QuestionManager" component={QuestionManagerScreen} />
             <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
+            <Stack.Screen name="Profile" component={ProfileScreen} />
           </>
         ) : (
           // Auth stack
