@@ -73,7 +73,7 @@ const SignupScreen = ({ navigation }) => {
         createdAt: serverTimestamp(),
         level: 1,
         totalGamesPlayed: 0,
-        coins: 0,
+        coins: 500, // Starting coins - enough for 5 games
         gems: 0,
       });
 

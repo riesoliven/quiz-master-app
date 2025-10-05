@@ -1,8 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import Constants from 'expo-constants';
+
+let mobileAds;
+try {
+  mobileAds = require('react-native-google-mobile-ads').default;
+} catch (e) {
+  console.log('AdMob not available in this environment');
+}
 
 import LoginScreen from './src/screens/LoginScreen';
 import SignupScreen from './src/screens/SignupScreen';
@@ -13,6 +21,7 @@ import ResultsScreen from './src/screens/ResultsScreen';
 import QuestionManagerScreen from './src/screens/QuestionManagerScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import DebugScreen from './src/screens/DebugScreen';
 
 const Stack = createStackNavigator();
 
@@ -42,6 +51,7 @@ function AppNavigator() {
             <Stack.Screen name="QuestionManager" component={QuestionManagerScreen} />
             <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
             <Stack.Screen name="Profile" component={ProfileScreen} />
+            <Stack.Screen name="Debug" component={DebugScreen} />
           </>
         ) : (
           // Auth stack
@@ -56,6 +66,38 @@ function AppNavigator() {
 }
 
 export default function App() {
+  useEffect(() => {
+    try {
+      // Proper Expo Go detection
+      const isExpoGo = Constants.executionEnvironment === 'storeClient';
+
+      console.log('🚀 Quiz Master App Starting...');
+      console.log('📱 Environment Info:');
+      console.log('  Execution Environment:', Constants.executionEnvironment);
+      console.log('  App Ownership:', Constants.appOwnership);
+      console.log('  Is Expo Go:', isExpoGo);
+
+      if (!isExpoGo && mobileAds) {
+        console.log('📺 Initializing AdMob SDK...');
+        mobileAds()
+          .initialize()
+          .then(adapterStatuses => {
+            console.log('✅ AdMob initialized successfully!');
+            console.log('Adapter statuses:', JSON.stringify(adapterStatuses, null, 2));
+          })
+          .catch(error => {
+            console.error('❌ AdMob initialization failed:', error);
+            console.error('Error message:', error.message);
+          });
+      } else {
+        console.log('📺 Running in Expo Go - simulated ads enabled');
+      }
+    } catch (error) {
+      console.error('❌ Critical error in App initialization:', error);
+      console.error('Stack:', error.stack);
+    }
+  }, []);
+
   return (
     <AuthProvider>
       <StatusBar style="light" backgroundColor="#3a4a5a" />

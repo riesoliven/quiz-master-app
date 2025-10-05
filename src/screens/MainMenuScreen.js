@@ -16,12 +16,15 @@ import { getSubjectOfTheDay } from '../services/dailySubject';
 import { useAuth } from '../context/AuthContext';
 import { getTopLeaderboard } from '../services/leaderboardService';
 import { getTopSubjects } from '../services/userStatsService';
+import { canAffordGame, spendCoinsForGame, awardCoinsForAd, GAME_COST } from '../services/coinService';
+import { initializeRewardedAd, showRewardedAd, isRewardedAdReady } from '../services/adService';
+import Constants from 'expo-constants';
 
 const { width, height } = Dimensions.get('window');
 
 const MainMenuScreen = ({ navigation }) => {
   // ALL state hooks MUST be inside the component
-  const { user, userProfile, logout } = useAuth();
+  const { user, userProfile, logout, refreshUserProfile } = useAuth();
   const [secretTaps, setSecretTaps] = useState(0);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
@@ -30,8 +33,27 @@ const MainMenuScreen = ({ navigation }) => {
   const [topSubjects, setTopSubjects] = useState([]);
 
   useEffect(() => {
-    loadLeaderboard();
-    loadTopSubjects();
+    try {
+      console.log('MainMenu: Loading data for user:', user?.uid);
+      loadLeaderboard();
+      loadTopSubjects();
+
+      // Initialize rewarded ad
+      console.log('MainMenu: Initializing ads...');
+      const cleanupAd = initializeRewardedAd();
+
+      return () => {
+        if (cleanupAd) {
+          try {
+            cleanupAd();
+          } catch (error) {
+            console.error('Error cleaning up ads:', error);
+          }
+        }
+      };
+    } catch (error) {
+      console.error('❌ Error in MainMenu useEffect:', error);
+    }
   }, [user]);
 
   const loadLeaderboard = async () => {
@@ -81,6 +103,70 @@ const MainMenuScreen = ({ navigation }) => {
     }
   };
 
+  const handlePlayGame = async () => {
+    if (!user) {
+      Alert.alert('Error', 'You must be logged in to play');
+      return;
+    }
+
+    // Check if user has enough coins
+    const hasCoins = await canAffordGame(user.uid);
+
+    if (!hasCoins) {
+      // Show insufficient coins dialog with ad option
+      Alert.alert(
+        'Insufficient Coins',
+        `You need ${GAME_COST} coins to play. You have ${userProfile?.coins || 0} coins.\n\nWatch an ad to earn 50 coins?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Watch Ad',
+            onPress: handleWatchAd
+          }
+        ]
+      );
+      return;
+    }
+
+    // Deduct coins and start game
+    const success = await spendCoinsForGame(user.uid);
+    if (success) {
+      // Refresh user profile to show updated coins
+      await refreshUserProfile();
+      navigation.navigate('HelperSelect');
+    } else {
+      Alert.alert('Error', 'Failed to start game. Please try again.');
+    }
+  };
+
+  const handleWatchAd = async () => {
+    try {
+      // Show the rewarded ad (auto-detects Expo Go vs EAS)
+      const earnedReward = await showRewardedAd();
+
+      if (earnedReward) {
+        // Award coins after watching ad
+        const coinsEarned = await awardCoinsForAd(user.uid);
+        await refreshUserProfile();
+        Alert.alert('Coins Earned!', `You received ${coinsEarned} coins! 🪙`);
+      } else {
+        // User closed ad early without earning reward (only in EAS builds)
+        Alert.alert(
+          'Ad Closed',
+          'You need to watch the ad completely to earn coins.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Error showing ad:', error);
+      Alert.alert(
+        'Ad Error',
+        error.message || 'Failed to show ad. Please try again later.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -126,6 +212,18 @@ const MainMenuScreen = ({ navigation }) => {
                   <Text style={styles.statLabel}>🎮 Games:</Text>
                   <Text style={styles.statValue}>{userProfile?.totalGamesPlayed || 0}</Text>
                 </View>
+
+                {/* DEBUG INFO - Remove after testing */}
+                <View style={[styles.statRow, {marginTop: 10, backgroundColor: 'rgba(255,200,0,0.2)', padding: 5, borderRadius: 5}]}>
+                  <Text style={{color: '#faca3a', fontSize: 10}}>
+                    ENV: {Constants.executionEnvironment}
+                  </Text>
+                </View>
+                <View style={[styles.statRow, {backgroundColor: 'rgba(255,200,0,0.2)', padding: 5, borderRadius: 5}]}>
+                  <Text style={{color: '#faca3a', fontSize: 10}}>
+                    OWN: {Constants.appOwnership}
+                  </Text>
+                </View>
               </View>
 
               <TouchableOpacity
@@ -133,6 +231,13 @@ const MainMenuScreen = ({ navigation }) => {
                 onPress={() => navigation.navigate('Profile')}
               >
                 <Text style={styles.profileButtonText}>📊 View Full Profile</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.profileButton, {backgroundColor: 'rgba(255, 100, 100, 0.2)', borderColor: '#ff6464'}]}
+                onPress={() => navigation.navigate('Debug')}
+              >
+                <Text style={[styles.profileButtonText, {color: '#ff6464'}]}>🔍 Debug Info (Test Ads)</Text>
               </TouchableOpacity>
             </View>
 
@@ -202,14 +307,15 @@ const MainMenuScreen = ({ navigation }) => {
               <Text style={styles.viewFullLeaderboard}>Tap to view full leaderboard →</Text>
             </TouchableOpacity>
 
-            <Pressable 
+            <Pressable
               style={({ pressed }) => [
                 styles.playButton,
                 pressed && styles.buttonPressed
               ]}
-              onPress={() => navigation.navigate('HelperSelect')}
+              onPress={handlePlayGame}
             >
               <Text style={styles.playButtonText}>PLAY GAME</Text>
+              <Text style={styles.playCostText}>Cost: {GAME_COST} 🪙</Text>
             </Pressable>
 
             <Pressable style={styles.secondaryButton}>
@@ -573,6 +679,11 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  playCostText: {
+    color: '#faca3a',
+    fontSize: 12,
+    marginTop: 4,
   },
   secondaryButton: {
     backgroundColor: 'rgba(90, 106, 122, 0.5)',

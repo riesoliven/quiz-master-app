@@ -19,6 +19,7 @@ import {
   getUserRank,
   saveScoreRecord
 } from '../services/leaderboardService';
+import { awardCoinsForScore } from '../services/coinService';
 
 const ResultsScreen = ({ route, navigation }) => {
   const {
@@ -41,6 +42,7 @@ const ResultsScreen = ({ route, navigation }) => {
   const [scaleAnim] = useState(new Animated.Value(0.5));
   const [isNewHighScore, setIsNewHighScore] = useState(false);
   const [previousHighScore, setPreviousHighScore] = useState(0);
+  const [coinsEarned, setCoinsEarned] = useState(0);
 
   useEffect(() => {
     // Load high scores and calculate rank
@@ -120,6 +122,13 @@ const ResultsScreen = ({ route, navigation }) => {
       const rankData = await getUserRank(user.uid);
       setPlayerRank(rankData.rank);
       setTotalPlayers(rankData.total);
+
+      // Award coins based on score
+      const coins = await awardCoinsForScore(user.uid, finalScore);
+      setCoinsEarned(coins);
+
+      // Refresh user profile to show updated coin balance
+      await refreshUserProfile();
 
     } catch (error) {
       console.error('Error loading scores:', error);
@@ -245,6 +254,9 @@ const ResultsScreen = ({ route, navigation }) => {
             <Text style={styles.completionText}>Quiz Complete!</Text>
             <Text style={styles.correctAnswersText}>
               You got {questionsAnswered}/{totalQuestions} correct
+            </Text>
+            <Text style={styles.coinsEarnedText}>
+              +{coinsEarned} 🪙 earned!
             </Text>
           </View>
         )}
@@ -422,6 +434,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     textAlign: 'center',
+  },
+  coinsEarnedText: {
+    color: '#faca3a',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginTop: 8,
   },
   completionBanner: {
     backgroundColor: 'rgba(90, 138, 202, 0.3)',
