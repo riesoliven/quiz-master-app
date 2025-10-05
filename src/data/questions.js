@@ -261,6 +261,7 @@ export const getQuizQuestions = (config = {}) => {
 
   const questions = [];
 
+  // Process each difficulty level in order to maintain progression
   Object.entries(distribution).forEach(([difficulty, count]) => {
     const availableQuestions = [];
 
@@ -276,13 +277,13 @@ export const getQuizQuestions = (config = {}) => {
       }
     });
 
-    // Shuffle and pick random questions
+    // Shuffle and pick random questions for THIS difficulty level only
     const shuffled = availableQuestions.sort(() => Math.random() - 0.5);
     questions.push(...shuffled.slice(0, Math.min(count, shuffled.length)));
   });
 
-  // Shuffle final question order
-  return questions.sort(() => Math.random() - 0.5).slice(0, 14);
+  // Return without shuffling - maintain difficulty progression (easy -> average -> difficult -> impossible)
+  return questions.slice(0, 14);
 };
 
 // Add question function (for Question Manager)

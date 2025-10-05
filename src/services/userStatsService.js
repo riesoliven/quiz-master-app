@@ -80,6 +80,12 @@ export const updateUserStats = async (userId, questionResults) => {
       lastUpdated: serverTimestamp()
     };
 
+    // Also increment totalGamesPlayed in the users collection
+    const userDocRef = doc(firestore, COLLECTIONS.USERS, userId);
+    await updateDoc(userDocRef, {
+      totalGamesPlayed: increment(1)
+    });
+
     // Update each subject
     for (const [subject, change] of Object.entries(subjectUpdates)) {
       const currentSubject = currentStats?.subjects?.[subject] || { correct: 0, total: 0 };

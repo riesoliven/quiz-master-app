@@ -213,17 +213,6 @@ const MainMenuScreen = ({ navigation }) => {
                   <Text style={styles.statValue}>{userProfile?.totalGamesPlayed || 0}</Text>
                 </View>
 
-                {/* DEBUG INFO - Remove after testing */}
-                <View style={[styles.statRow, {marginTop: 10, backgroundColor: 'rgba(255,200,0,0.2)', padding: 5, borderRadius: 5}]}>
-                  <Text style={{color: '#faca3a', fontSize: 10}}>
-                    ENV: {Constants.executionEnvironment}
-                  </Text>
-                </View>
-                <View style={[styles.statRow, {backgroundColor: 'rgba(255,200,0,0.2)', padding: 5, borderRadius: 5}]}>
-                  <Text style={{color: '#faca3a', fontSize: 10}}>
-                    OWN: {Constants.appOwnership}
-                  </Text>
-                </View>
               </View>
 
               <TouchableOpacity
@@ -231,13 +220,6 @@ const MainMenuScreen = ({ navigation }) => {
                 onPress={() => navigation.navigate('Profile')}
               >
                 <Text style={styles.profileButtonText}>📊 View Full Profile</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.profileButton, {backgroundColor: 'rgba(255, 100, 100, 0.2)', borderColor: '#ff6464'}]}
-                onPress={() => navigation.navigate('Debug')}
-              >
-                <Text style={[styles.profileButtonText, {color: '#ff6464'}]}>🔍 Debug Info (Test Ads)</Text>
               </TouchableOpacity>
             </View>
 

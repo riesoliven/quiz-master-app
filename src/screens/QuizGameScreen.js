@@ -61,11 +61,8 @@ const QuizGameScreen = ({ route, navigation }) => {
   const question = questions[currentQuestion];
   const isBonusQuestion = question.subject === dailySubject.subject;
   const questionNumber = currentQuestion + 1;
-  const difficulty = 
-    questionNumber <= 5 ? 'EASY' : 
-    questionNumber <= 9 ? 'AVERAGE' : 
-    questionNumber <= 12 ? 'DIFFICULT' : 
-    'IMPOSSIBLE';
+  // Use the actual difficulty from the question data
+  const difficulty = question.difficulty ? question.difficulty.toUpperCase() : 'EASY';
 
   // Calculate time bonus based on streak
   const getTimeBonus = (currentStreak) => {
@@ -125,7 +122,10 @@ const QuizGameScreen = ({ route, navigation }) => {
           {
             text: 'Quit',
             style: 'destructive',
-            onPress: () => navigation.navigate('MainMenu')
+            onPress: () => {
+              setQuizComplete(true); // Stop the timer
+              navigation.navigate('MainMenu');
+            }
           }
         ]
       );
@@ -140,8 +140,13 @@ const QuizGameScreen = ({ route, navigation }) => {
     return () => backHandler.remove();
   }, [navigation]);
 
-  const handleTimeUp = () => {
+  const handleTimeUp = async () => {
   setQuizComplete(true);
+
+  // Update user stats with question results
+  if (user && questionResults.length > 0) {
+    await updateUserStats(user.uid, questionResults);
+  }
 
   setTimeout(() => {
     navigation.replace('Results', {  // Changed to 'Results'

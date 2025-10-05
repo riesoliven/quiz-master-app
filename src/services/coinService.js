@@ -32,6 +32,17 @@ export const canAffordGame = async (userId) => {
  */
 export const spendCoinsForGame = async (userId) => {
   try {
+    // First check if user has enough coins
+    const userDoc = await getDoc(doc(firestore, COLLECTIONS.USERS, userId));
+    if (!userDoc.exists()) return false;
+
+    const currentCoins = userDoc.data().coins || 0;
+    if (currentCoins < GAME_COST) {
+      console.error('Not enough coins to play');
+      return false;
+    }
+
+    // Deduct coins
     const userDocRef = doc(firestore, COLLECTIONS.USERS, userId);
     await updateDoc(userDocRef, {
       coins: increment(-GAME_COST)
