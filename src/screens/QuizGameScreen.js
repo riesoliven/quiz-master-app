@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -50,7 +50,9 @@ const QuizGameScreen = ({ route, navigation }) => {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [score, setScore] = useState(0);
   const [correctAnswers, setCorrectAnswers] = useState(0);
+  const correctAnswersRef = useRef(0); // Immediate tracking without state delay
   const [questionResults, setQuestionResults] = useState([]); // Track results for stats
+  const questionResultsRef = useRef([]); // Immediate tracking without state delay
   const [streak, setStreak] = useState(0);
   const [helperUsed, setHelperUsed] = useState(false);
   const [totalTimer, setTotalTimer] = useState(90); // 90 seconds for entire quiz
@@ -166,11 +168,22 @@ const QuizGameScreen = ({ route, navigation }) => {
   }, [navigation]);
 
   const handleTimeUp = async () => {
+  // Use ref for immediate access
+  const allResults = questionResultsRef.current;
+  const finalCorrectCount = correctAnswersRef.current;
+
+  console.log('⏰ TIME UP - Quiz ending early:', {
+    currentQuestion: currentQuestion + 1,
+    totalQuestions: questions.length,
+    correctAnswers: finalCorrectCount,
+    questionResults: allResults.length
+  });
+
   setQuizComplete(true);
 
   // Update user stats with question results
-  if (user && questionResults.length > 0) {
-    await updateUserStats(user.uid, questionResults);
+  if (user && allResults.length > 0) {
+    await updateUserStats(user.uid, allResults);
   }
 
   setTimeout(() => {
@@ -180,7 +193,7 @@ const QuizGameScreen = ({ route, navigation }) => {
       timeRemaining: 0,
       timeBonus: 0,
       completionBonus: 0,
-      questionsAnswered: correctAnswers,
+      questionsAnswered: finalCorrectCount,
       totalQuestions: questions.length,
       message: 'Time\'s Up!'
     });
@@ -190,16 +203,25 @@ const QuizGameScreen = ({ route, navigation }) => {
   const handleAnswer = (answerIndex) => {
     if (isAnswered) return;
 
+    console.log('Answer submitted:', {
+      questionNumber: currentQuestion + 1,
+      totalQuestions: questions.length,
+      answerIndex,
+      correctIndex: question.correct
+    });
+
     setSelectedAnswer(answerIndex);
     setIsAnswered(true);
 
     const isCorrect = answerIndex === question.correct;
 
-    // Track result for stats
-    setQuestionResults(prev => [...prev, {
+    // Track result for stats (both state and ref for immediate access)
+    const newResult = {
       subject: question.subject,
       isCorrect
-    }]);
+    };
+    questionResultsRef.current = [...questionResultsRef.current, newResult];
+    setQuestionResults(prev => [...prev, newResult]);
 
     if (isCorrect) {
       // Calculate speed bonus based on time elapsed
@@ -212,6 +234,7 @@ const QuizGameScreen = ({ route, navigation }) => {
       const bonusCalc = calculateBonusPoints(totalBeforeBonus, question.subject);
 
       setScore(prev => prev + bonusCalc.total);
+      correctAnswersRef.current += 1; // Update ref immediately
       setCorrectAnswers(prev => prev + 1);
 
       // Increase streak
@@ -234,6 +257,12 @@ const QuizGameScreen = ({ route, navigation }) => {
   };
 
   const moveToNext = () => {
+    console.log('moveToNext called:', {
+      currentQuestion: currentQuestion + 1,
+      totalQuestions: questions.length,
+      isLastQuestion: currentQuestion >= questions.length - 1
+    });
+
     if (currentQuestion < questions.length - 1) {
       setCurrentQuestion(prev => prev + 1);
       setSelectedAnswer(null);
@@ -242,6 +271,7 @@ const QuizGameScreen = ({ route, navigation }) => {
       setQuestionStartTime(Date.now()); // Reset timer for next question
     } else {
       // Quiz complete - calculate final score
+      console.log('Quiz complete triggered from moveToNext');
       handleQuizComplete();
     }
   };
@@ -249,20 +279,30 @@ const QuizGameScreen = ({ route, navigation }) => {
   const handleQuizComplete = async () => {
   setQuizComplete(true);
 
+  // Use ref for immediate access to all results including the last one
+  const allResults = questionResultsRef.current;
+  const finalCorrectCount = correctAnswersRef.current;
+
+  console.log('Quiz Complete - Final Stats:', {
+    correctAnswers: finalCorrectCount,
+    totalQuestions: questions.length,
+    questionResults: allResults.length
+  });
+
   // Calculate final score with time bonus
   const timeBonus = totalTimer * 4;
   const completionBonus = 300;
   const finalScore = score + timeBonus + completionBonus;
 
   // Update user stats with question results
-  if (user && questionResults.length > 0) {
-    await updateUserStats(user.uid, questionResults);
+  if (user && allResults.length > 0) {
+    await updateUserStats(user.uid, allResults);
   }
 
   // Award helper EXP based on correct answers (2 EXP per correct answer)
-  if (user && helpers && correctAnswers > 0) {
+  if (user && helpers && finalCorrectCount > 0) {
     const expPerCorrect = 2;
-    const totalExp = correctAnswers * expPerCorrect;
+    const totalExp = finalCorrectCount * expPerCorrect;
 
     // Award EXP to all 3 helpers
     const expResults = await Promise.all(
@@ -287,7 +327,7 @@ const QuizGameScreen = ({ route, navigation }) => {
       timeRemaining: totalTimer,
       timeBonus: timeBonus,
       completionBonus: completionBonus,
-      questionsAnswered: correctAnswers,
+      questionsAnswered: finalCorrectCount,
       totalQuestions: questions.length,
       message: 'Quiz Complete!'
     });

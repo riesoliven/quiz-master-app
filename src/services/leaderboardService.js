@@ -109,8 +109,8 @@ export const updateHighScore = async (userId, newScore, message, username, avata
 
     const currentHighScore = docSnap.data().highScore || 0;
 
-    if (newScore > currentHighScore) {
-      // New high score!
+    if (newScore >= currentHighScore) {
+      // New high score OR same score (update message/username/avatar)
       await updateDoc(leaderboardDocRef, {
         highScore: newScore,
         message: message || '',
