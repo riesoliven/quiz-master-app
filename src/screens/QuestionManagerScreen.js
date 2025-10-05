@@ -11,7 +11,7 @@ import {
   ActivityIndicator
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import {
   addQuestion,
@@ -86,23 +86,38 @@ const QuestionManagerScreen = ({ navigation }) => {
   const importCSV = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: 'text/csv',
+        type: ['text/csv', 'text/comma-separated-values', 'application/csv', '*/*'],
         copyToCacheDirectory: true
       });
 
-      if (result.type === 'success') {
+      console.log('Document picker result:', result);
+
+      if (result.canceled) {
+        return;
+      }
+
+      if (result.assets && result.assets.length > 0) {
         setLoading(true);
-        const content = await FileSystem.readAsStringAsync(result.uri);
+        const file = result.assets[0];
+        const content = await FileSystem.readAsStringAsync(file.uri);
         const questions = parseCSV(content);
 
+        let successCount = 0;
         for (const q of questions) {
-          await addQuestion(q);
+          try {
+            await addQuestion(q);
+            successCount++;
+          } catch (error) {
+            console.error('Error adding question:', error);
+          }
         }
+
         await loadStats();
-        Alert.alert('Success', `Imported ${questions.length} questions!`);
+        Alert.alert('Success', `Imported ${successCount} out of ${questions.length} questions!`);
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to import CSV');
+      console.error('Import error:', error);
+      Alert.alert('Error', `Failed to import CSV: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -306,7 +321,7 @@ const QuestionManagerScreen = ({ navigation }) => {
               {/* Subject Selector */}
               <Text style={styles.inputLabel}>Subject:</Text>
               <View style={styles.subjectSelector}>
-                {['Arithmetic & Algebra', 'Geometry & Trigonometry', 'Statistics & Probability', 'Physics', 'Chemistry', 'Biology', 'History', 'Sports & Entertainment', 'Literature', 'Astronomy'].map(subject => (
+                {['Arithmetic & Algebra', 'Geometry & Trigonometry', 'Statistics & Probability', 'Physics', 'Chemistry', 'Biology', 'History', 'Sports & Entertainment', 'Literature', 'Astronomy', 'Geography', 'Technology'].map(subject => (
                   <TouchableOpacity
                     key={subject}
                     style={[

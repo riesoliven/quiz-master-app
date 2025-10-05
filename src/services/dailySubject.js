@@ -11,7 +11,9 @@ const subjects = [
   'History',
   'Sports & Entertainment',
   'Literature',
-  'Astronomy'
+  'Astronomy',
+  'Geography',
+  'Technology'
 ];
 const subjectIcons = {
   'Arithmetic & Algebra': '📐',
@@ -23,7 +25,9 @@ const subjectIcons = {
   'History': '🏛️',
   'Sports & Entertainment': '⚽',
   'Literature': '📚',
-  'Astronomy': '🔭'
+  'Astronomy': '🔭',
+  'Geography': '🌍',
+  'Technology': '💻'
 };
 
 // Get current UTC date as a string (YYYY-MM-DD)

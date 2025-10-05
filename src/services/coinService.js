@@ -1,58 +1,8 @@
 import { doc, getDoc, updateDoc, increment } from 'firebase/firestore';
 import { firestore, COLLECTIONS } from './firebase';
 
-// Cost to play one game
-export const GAME_COST = 100;
-
 // Reward for watching an ad
-export const AD_REWARD = 50;
-
-/**
- * Check if user has enough coins to play
- * @param {string} userId
- * @returns {boolean}
- */
-export const canAffordGame = async (userId) => {
-  try {
-    const userDoc = await getDoc(doc(firestore, COLLECTIONS.USERS, userId));
-    if (!userDoc.exists()) return false;
-
-    const coins = userDoc.data().coins || 0;
-    return coins >= GAME_COST;
-  } catch (error) {
-    console.error('Error checking coins:', error);
-    return false;
-  }
-};
-
-/**
- * Deduct coins to start a game
- * @param {string} userId
- * @returns {boolean} success
- */
-export const spendCoinsForGame = async (userId) => {
-  try {
-    // First check if user has enough coins
-    const userDoc = await getDoc(doc(firestore, COLLECTIONS.USERS, userId));
-    if (!userDoc.exists()) return false;
-
-    const currentCoins = userDoc.data().coins || 0;
-    if (currentCoins < GAME_COST) {
-      console.error('Not enough coins to play');
-      return false;
-    }
-
-    // Deduct coins
-    const userDocRef = doc(firestore, COLLECTIONS.USERS, userId);
-    await updateDoc(userDocRef, {
-      coins: increment(-GAME_COST)
-    });
-    return true;
-  } catch (error) {
-    console.error('Error spending coins:', error);
-    return false;
-  }
-};
+export const AD_REWARD_COINS = 50;
 
 /**
  * Award coins based on quiz score
@@ -83,9 +33,9 @@ export const awardCoinsForAd = async (userId) => {
   try {
     const userDocRef = doc(firestore, COLLECTIONS.USERS, userId);
     await updateDoc(userDocRef, {
-      coins: increment(AD_REWARD)
+      coins: increment(AD_REWARD_COINS)
     });
-    return AD_REWARD;
+    return AD_REWARD_COINS;
   } catch (error) {
     console.error('Error awarding ad coins:', error);
     return 0;

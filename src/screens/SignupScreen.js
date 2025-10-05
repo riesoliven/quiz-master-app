@@ -73,8 +73,10 @@ const SignupScreen = ({ navigation }) => {
         createdAt: serverTimestamp(),
         level: 1,
         totalGamesPlayed: 0,
-        coins: 500, // Starting coins - enough for 5 games
-        gems: 0,
+        coins: 500, // Starting coins
+        gems: 0, // Starting gems
+        energy: 25, // Starting energy (full)
+        lastEnergyUpdate: serverTimestamp(),
         isAdmin: false,
       });
 

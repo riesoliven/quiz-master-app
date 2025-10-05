@@ -239,17 +239,65 @@ export const questionDatabase = {
       { id: 'astro_imp_2', question: 'What percentage of the universe is dark energy?', answers: ['27%', '50%', '68%', '85%'], correct: 2, explanation: 'Dark energy makes up approximately 68% of the universe', points: 800 },
       { id: 'astro_imp_3', question: 'What is the orbital period of Halley\'s Comet?', answers: ['50 years', '65 years', '76 years', '100 years'], correct: 2, explanation: 'Halley\'s Comet returns approximately every 76 years', points: 800 }
     ]
+  },
+
+  Geography: {
+    icon: '🌍',
+    easy: [
+      { id: 'geo_easy_1', question: 'What is the capital of France?', answers: ['London', 'Berlin', 'Paris', 'Rome'], correct: 2, explanation: 'Paris is the capital of France', points: 100 },
+      { id: 'geo_easy_2', question: 'Which continent is Egypt located in?', answers: ['Asia', 'Africa', 'Europe', 'South America'], correct: 1, explanation: 'Egypt is in Africa', points: 100 },
+      { id: 'geo_easy_3', question: 'What is the largest ocean on Earth?', answers: ['Atlantic', 'Indian', 'Arctic', 'Pacific'], correct: 3, explanation: 'The Pacific Ocean is the largest', points: 100 }
+    ],
+    average: [
+      { id: 'geo_avg_1', question: 'What is the longest river in the world?', answers: ['Amazon', 'Nile', 'Yangtze', 'Mississippi'], correct: 1, explanation: 'The Nile River is the longest at ~6,650 km', points: 200 },
+      { id: 'geo_avg_2', question: 'Which country has the most time zones?', answers: ['USA', 'Russia', 'France', 'China'], correct: 2, explanation: 'France has 12 time zones (including territories)', points: 200 },
+      { id: 'geo_avg_3', question: 'What is the smallest country in the world?', answers: ['Monaco', 'Vatican City', 'San Marino', 'Liechtenstein'], correct: 1, explanation: 'Vatican City is the smallest at 0.44 km²', points: 200 }
+    ],
+    difficult: [
+      { id: 'geo_diff_1', question: 'What is the deepest point in the ocean?', answers: ['Java Trench', 'Mariana Trench', 'Puerto Rico Trench', 'Tonga Trench'], correct: 1, explanation: 'Mariana Trench (~11,000 m deep)', points: 400 },
+      { id: 'geo_diff_2', question: 'Which African country was formerly known as Abyssinia?', answers: ['Eritrea', 'Somalia', 'Ethiopia', 'Sudan'], correct: 2, explanation: 'Ethiopia was historically called Abyssinia', points: 400 },
+      { id: 'geo_diff_3', question: 'What is the capital of Mongolia?', answers: ['Astana', 'Bishkek', 'Tashkent', 'Ulaanbaatar'], correct: 3, explanation: 'Ulaanbaatar is Mongolia\'s capital', points: 400 }
+    ],
+    impossible: [
+      { id: 'geo_imp_1', question: 'How many countries does the Danube River flow through?', answers: ['6', '8', '10', '12'], correct: 2, explanation: 'The Danube flows through 10 countries', points: 800 },
+      { id: 'geo_imp_2', question: 'What is the only sea without any coastline?', answers: ['Dead Sea', 'Caspian Sea', 'Sargasso Sea', 'Red Sea'], correct: 2, explanation: 'The Sargasso Sea is bounded by ocean currents', points: 800 },
+      { id: 'geo_imp_3', question: 'What percentage of Earth\'s surface is covered by Russia?', answers: ['1.5%', '2.1%', '3.4%', '4.2%'], correct: 0, explanation: 'Russia covers about 1.5% of Earth\'s surface', points: 800 }
+    ]
+  },
+
+  Technology: {
+    icon: '💻',
+    easy: [
+      { id: 'tech_easy_1', question: 'What does "URL" stand for?', answers: ['Universal Resource Locator', 'Uniform Resource Locator', 'Universal Reference Link', 'Uniform Reference Link'], correct: 1, explanation: 'URL = Uniform Resource Locator', points: 100 },
+      { id: 'tech_easy_2', question: 'Who is the founder of Microsoft?', answers: ['Steve Jobs', 'Bill Gates', 'Mark Zuckerberg', 'Elon Musk'], correct: 1, explanation: 'Bill Gates co-founded Microsoft in 1975', points: 100 },
+      { id: 'tech_easy_3', question: 'What does "AI" stand for?', answers: ['Automated Intelligence', 'Artificial Intelligence', 'Advanced Integration', 'Automatic Interface'], correct: 1, explanation: 'AI = Artificial Intelligence', points: 100 }
+    ],
+    average: [
+      { id: 'tech_avg_1', question: 'What year was the first iPhone released?', answers: ['2005', '2007', '2009', '2011'], correct: 1, explanation: 'The first iPhone was released in 2007', points: 200 },
+      { id: 'tech_avg_2', question: 'What does "GPU" stand for?', answers: ['General Processing Unit', 'Graphics Processing Unit', 'Global Processing Unit', 'Graphical Performance Unit'], correct: 1, explanation: 'GPU = Graphics Processing Unit', points: 200 },
+      { id: 'tech_avg_3', question: 'Which company developed ChatGPT?', answers: ['Google', 'Microsoft', 'OpenAI', 'Meta'], correct: 2, explanation: 'OpenAI developed ChatGPT', points: 200 }
+    ],
+    difficult: [
+      { id: 'tech_diff_1', question: 'What is the primary programming language used for machine learning?', answers: ['Java', 'C++', 'Python', 'JavaScript'], correct: 2, explanation: 'Python is the dominant language for ML/AI', points: 400 },
+      { id: 'tech_diff_2', question: 'What does "LLM" stand for in AI?', answers: ['Large Language Model', 'Linear Learning Machine', 'Logical Language Module', 'Long-term Learning Memory'], correct: 0, explanation: 'LLM = Large Language Model', points: 400 },
+      { id: 'tech_diff_3', question: 'What year was the World Wide Web invented?', answers: ['1983', '1989', '1995', '2001'], correct: 1, explanation: 'Tim Berners-Lee invented the WWW in 1989', points: 400 }
+    ],
+    impossible: [
+      { id: 'tech_imp_1', question: 'How many parameters does GPT-4 approximately have?', answers: ['175 billion', '540 billion', '1 trillion', '1.76 trillion'], correct: 3, explanation: 'GPT-4 is estimated to have ~1.76 trillion parameters', points: 800 },
+      { id: 'tech_imp_2', question: 'What was the first computer virus called?', answers: ['ILOVEYOU', 'Creeper', 'Morris Worm', 'Melissa'], correct: 1, explanation: 'Creeper (1971) was the first computer virus', points: 800 },
+      { id: 'tech_imp_3', question: 'What is the maximum theoretical speed of USB 4.0?', answers: ['10 Gbps', '20 Gbps', '40 Gbps', '80 Gbps'], correct: 2, explanation: 'USB 4.0 supports up to 40 Gbps', points: 800 }
+    ]
   }
 };
 
 // Helper characters with updated subject skills
 export const helpers = [
-  { id: 1, name: 'Einstein', icon: '🧠', 'Arithmetic & Algebra': 85, 'Geometry & Trigonometry': 90, 'Statistics & Probability': 80, Physics: 95, Chemistry: 70, Biology: 40, History: 50, 'Sports & Entertainment': 20, Literature: 45, Astronomy: 90 },
-  { id: 2, name: 'Darwin', icon: '🦜', 'Arithmetic & Algebra': 50, 'Geometry & Trigonometry': 45, 'Statistics & Probability': 70, Physics: 40, Chemistry: 65, Biology: 95, History: 60, 'Sports & Entertainment': 30, Literature: 55, Astronomy: 55 },
-  { id: 3, name: 'Curie', icon: '⚗️', 'Arithmetic & Algebra': 75, 'Geometry & Trigonometry': 70, 'Statistics & Probability': 65, Physics: 85, Chemistry: 95, Biology: 50, History: 45, 'Sports & Entertainment': 25, Literature: 40, Astronomy: 75 },
-  { id: 4, name: 'Turing', icon: '💻', 'Arithmetic & Algebra': 95, 'Geometry & Trigonometry': 88, 'Statistics & Probability': 90, Physics: 70, Chemistry: 45, Biology: 30, History: 40, 'Sports & Entertainment': 35, Literature: 50, Astronomy: 65 },
-  { id: 5, name: 'Shakespeare', icon: '🎭', 'Arithmetic & Algebra': 40, 'Geometry & Trigonometry': 35, 'Statistics & Probability': 30, Physics: 25, Chemistry: 30, Biology: 35, History: 85, 'Sports & Entertainment': 75, Literature: 95, Astronomy: 40 },
-  { id: 6, name: 'Aristotle', icon: '📜', 'Arithmetic & Algebra': 70, 'Geometry & Trigonometry': 75, 'Statistics & Probability': 60, Physics: 60, Chemistry: 55, Biology: 70, History: 90, 'Sports & Entertainment': 50, Literature: 85, Astronomy: 80 }
+  { id: 1, name: 'Einstein', icon: '🧠', 'Arithmetic & Algebra': 85, 'Geometry & Trigonometry': 90, 'Statistics & Probability': 80, Physics: 95, Chemistry: 70, Biology: 40, History: 50, 'Sports & Entertainment': 20, Literature: 45, Astronomy: 90, Geography: 55, Technology: 75 },
+  { id: 2, name: 'Darwin', icon: '🦜', 'Arithmetic & Algebra': 50, 'Geometry & Trigonometry': 45, 'Statistics & Probability': 70, Physics: 40, Chemistry: 65, Biology: 95, History: 60, 'Sports & Entertainment': 30, Literature: 55, Astronomy: 55, Geography: 75, Technology: 35 },
+  { id: 3, name: 'Curie', icon: '⚗️', 'Arithmetic & Algebra': 75, 'Geometry & Trigonometry': 70, 'Statistics & Probability': 65, Physics: 85, Chemistry: 95, Biology: 50, History: 45, 'Sports & Entertainment': 25, Literature: 40, Astronomy: 75, Geography: 50, Technology: 70 },
+  { id: 4, name: 'Turing', icon: '💻', 'Arithmetic & Algebra': 95, 'Geometry & Trigonometry': 88, 'Statistics & Probability': 90, Physics: 70, Chemistry: 45, Biology: 30, History: 40, 'Sports & Entertainment': 35, Literature: 50, Astronomy: 65, Geography: 45, Technology: 98 },
+  { id: 5, name: 'Shakespeare', icon: '🎭', 'Arithmetic & Algebra': 40, 'Geometry & Trigonometry': 35, 'Statistics & Probability': 30, Physics: 25, Chemistry: 30, Biology: 35, History: 85, 'Sports & Entertainment': 75, Literature: 95, Astronomy: 40, Geography: 70, Technology: 20 },
+  { id: 6, name: 'Aristotle', icon: '📜', 'Arithmetic & Algebra': 70, 'Geometry & Trigonometry': 75, 'Statistics & Probability': 60, Physics: 60, Chemistry: 55, Biology: 70, History: 90, 'Sports & Entertainment': 50, Literature: 85, Astronomy: 80, Geography: 85, Technology: 30 }
 ];
 
 // Get quiz questions (14 questions, randomized from all subjects)

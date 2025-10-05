@@ -16,7 +16,9 @@ import { getSubjectOfTheDay } from '../services/dailySubject';
 import { useAuth } from '../context/AuthContext';
 import { getTopLeaderboard } from '../services/leaderboardService';
 import { getTopSubjects } from '../services/userStatsService';
-import { canAffordGame, spendCoinsForGame, awardCoinsForAd, GAME_COST } from '../services/coinService';
+import { awardCoinsForAd } from '../services/coinService';
+import { getUserEnergy, canAffordGame, spendEnergyForGame, addEnergy, refillEnergy, ENERGY_PER_GAME, MAX_ENERGY, getTimeUntilNextEnergyFormatted } from '../services/energyService';
+import { awardGemsForAd, getUserGems } from '../services/gemService';
 import { initializeRewardedAd, showRewardedAd, isRewardedAdReady } from '../services/adService';
 import { doc, updateDoc } from 'firebase/firestore';
 import { firestore, COLLECTIONS } from '../services/firebase';
@@ -29,20 +31,30 @@ const MainMenuScreen = ({ navigation }) => {
   const { user, userProfile, logout, refreshUserProfile } = useAuth();
   const [secretTaps, setSecretTaps] = useState(0);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showAdRewardModal, setShowAdRewardModal] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [dailySubject] = useState(getSubjectOfTheDay());
   const [leaderboard, setLeaderboard] = useState([]);
   const [topSubjects, setTopSubjects] = useState([]);
+  const [energy, setEnergy] = useState(0);
+  const [energyLastUpdate, setEnergyLastUpdate] = useState(new Date());
+  const [gems, setGems] = useState(0);
 
   useEffect(() => {
     try {
       console.log('MainMenu: Loading data for user:', user?.uid);
       loadLeaderboard();
       loadTopSubjects();
+      loadEnergyAndGems();
 
       // Initialize rewarded ad
       console.log('MainMenu: Initializing ads...');
       const cleanupAd = initializeRewardedAd();
+
+      // Update energy display every minute
+      const energyInterval = setInterval(() => {
+        loadEnergyAndGems();
+      }, 60000); // Update every minute
 
       return () => {
         if (cleanupAd) {
@@ -52,6 +64,7 @@ const MainMenuScreen = ({ navigation }) => {
             console.error('Error cleaning up ads:', error);
           }
         }
+        clearInterval(energyInterval);
       };
     } catch (error) {
       console.error('❌ Error in MainMenu useEffect:', error);
@@ -67,6 +80,15 @@ const MainMenuScreen = ({ navigation }) => {
     if (!user) return;
     const subjects = await getTopSubjects(user.uid, 3);
     setTopSubjects(subjects);
+  };
+
+  const loadEnergyAndGems = async () => {
+    if (!user) return;
+    const { energy: currentEnergy, lastUpdate } = await getUserEnergy(user.uid);
+    const currentGems = await getUserGems(user.uid);
+    setEnergy(currentEnergy);
+    setEnergyLastUpdate(lastUpdate);
+    setGems(currentGems);
   };
 
   const handleLogout = () => {
@@ -126,14 +148,15 @@ const MainMenuScreen = ({ navigation }) => {
       return;
     }
 
-    // Check if user has enough coins
-    const hasCoins = await canAffordGame(user.uid);
+    // Check if user has enough energy
+    const hasEnergy = await canAffordGame(user.uid);
 
-    if (!hasCoins) {
-      // Show insufficient coins dialog with ad option
+    if (!hasEnergy) {
+      // Show insufficient energy dialog with ad option
+      const timeUntilNext = getTimeUntilNextEnergyFormatted(energyLastUpdate);
       Alert.alert(
-        'Insufficient Coins',
-        `You need ${GAME_COST} coins to play. You have ${userProfile?.coins || 0} coins.\n\nWatch an ad to earn 50 coins?`,
+        'Insufficient Energy',
+        `You need ${ENERGY_PER_GAME} energy to play. You have ${energy} energy.\n\nNext energy in: ${timeUntilNext}\n\nWatch an ad to get energy?`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -145,11 +168,11 @@ const MainMenuScreen = ({ navigation }) => {
       return;
     }
 
-    // Deduct coins and start game
-    const success = await spendCoinsForGame(user.uid);
+    // Deduct energy and start game
+    const success = await spendEnergyForGame(user.uid);
     if (success) {
-      // Refresh user profile to show updated coins
-      await refreshUserProfile();
+      // Reload energy display
+      await loadEnergyAndGems();
       navigation.navigate('HelperSelect');
     } else {
       Alert.alert('Error', 'Failed to start game. Please try again.');
@@ -157,15 +180,33 @@ const MainMenuScreen = ({ navigation }) => {
   };
 
   const handleWatchAd = async () => {
+    // Show player choice modal
+    setShowAdRewardModal(true);
+  };
+
+  const handleAdRewardChoice = async (rewardType) => {
+    setShowAdRewardModal(false);
+
     try {
       // Show the rewarded ad (auto-detects Expo Go vs EAS)
       const earnedReward = await showRewardedAd();
 
       if (earnedReward) {
-        // Award coins after watching ad
-        const coinsEarned = await awardCoinsForAd(user.uid);
-        await refreshUserProfile();
-        Alert.alert('Coins Earned!', `You received ${coinsEarned} coins! 🪙`);
+        // Award chosen reward
+        if (rewardType === 'energy') {
+          await addEnergy(user.uid, 2);
+          await loadEnergyAndGems();
+          Alert.alert('Energy Earned!', `You received 2 energy! ⚡`);
+        } else if (rewardType === 'gems') {
+          await awardGemsForAd(user.uid);
+          await loadEnergyAndGems();
+          Alert.alert('Gems Earned!', `You received 2 gems! 💎`);
+        } else {
+          // coins
+          const coinsEarned = await awardCoinsForAd(user.uid);
+          await refreshUserProfile();
+          Alert.alert('Coins Earned!', `You received ${coinsEarned} coins! 🪙`);
+        }
       } else {
         // User closed ad early without earning reward (only in EAS builds)
         Alert.alert(
@@ -182,6 +223,14 @@ const MainMenuScreen = ({ navigation }) => {
         [{ text: 'OK' }]
       );
     }
+  };
+
+  // DEV: Instant energy refill for testing
+  const handleDevRefillEnergy = async () => {
+    if (!user) return;
+    await refillEnergy(user.uid);
+    await loadEnergyAndGems();
+    Alert.alert('DEV', 'Energy refilled to 25! ⚡');
   };
 
   return (
@@ -306,15 +355,40 @@ const MainMenuScreen = ({ navigation }) => {
               <Text style={styles.viewFullLeaderboard}>Tap to view full leaderboard →</Text>
             </TouchableOpacity>
 
+            {/* Energy Bar */}
+            <View style={styles.energyBox}>
+              <View style={styles.energyHeader}>
+                <Text style={styles.energyLabel}>⚡ ENERGY</Text>
+                <Text style={styles.energyCount}>{energy}/{MAX_ENERGY}</Text>
+                <TouchableOpacity onPress={handleDevRefillEnergy} style={styles.devButton}>
+                  <Text style={styles.devButtonText}>DEV +25</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.energyBarContainer}>
+                <View style={[styles.energyBarFill, { width: `${(energy / MAX_ENERGY) * 100}%` }]} />
+              </View>
+              <Text style={styles.energyHint}>
+                {energy >= MAX_ENERGY ? 'Full energy!' : `Next energy in: ${getTimeUntilNextEnergyFormatted(energyLastUpdate)}`}
+              </Text>
+            </View>
+
             <Pressable
               style={({ pressed }) => [
                 styles.playButton,
-                pressed && styles.buttonPressed
+                pressed && styles.buttonPressed,
+                energy < ENERGY_PER_GAME && styles.buttonDisabled
               ]}
               onPress={handlePlayGame}
             >
               <Text style={styles.playButtonText}>PLAY GAME</Text>
-              <Text style={styles.playCostText}>Cost: {GAME_COST} 🪙</Text>
+              <Text style={styles.playCostText}>Cost: {ENERGY_PER_GAME} ⚡</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.adButton}
+              onPress={handleWatchAd}
+            >
+              <Text style={styles.adButtonText}>📺 WATCH AD FOR REWARDS</Text>
             </Pressable>
 
             <Pressable
@@ -370,6 +444,60 @@ const MainMenuScreen = ({ navigation }) => {
                 <Text style={styles.modalButtonText}>Confirm</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Ad Reward Choice Modal */}
+      <Modal
+        visible={showAdRewardModal}
+        transparent={true}
+        animationType="fade"
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.rewardModal}>
+            <Text style={styles.modalTitle}>📺 Choose Your Reward</Text>
+            <Text style={styles.rewardDescription}>Watch an ad to earn:</Text>
+
+            <TouchableOpacity
+              style={styles.rewardOption}
+              onPress={() => handleAdRewardChoice('energy')}
+            >
+              <Text style={styles.rewardIcon}>⚡</Text>
+              <View style={styles.rewardInfo}>
+                <Text style={styles.rewardName}>Energy</Text>
+                <Text style={styles.rewardAmount}>+2 Energy</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.rewardOption}
+              onPress={() => handleAdRewardChoice('gems')}
+            >
+              <Text style={styles.rewardIcon}>💎</Text>
+              <View style={styles.rewardInfo}>
+                <Text style={styles.rewardName}>Gems</Text>
+                <Text style={styles.rewardAmount}>+2 Gems</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.rewardOption}
+              onPress={() => handleAdRewardChoice('coins')}
+            >
+              <Text style={styles.rewardIcon}>🪙</Text>
+              <View style={styles.rewardInfo}>
+                <Text style={styles.rewardName}>Coins</Text>
+                <Text style={styles.rewardAmount}>+50 Coins</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalButton, styles.cancelButton, { marginTop: 15 }]}
+              onPress={() => setShowAdRewardModal(false)}
+            >
+              <Text style={styles.modalButtonText}>Cancel</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -862,6 +990,115 @@ const styles = StyleSheet.create({
   topSubjectAccuracy: {
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  energyBox: {
+    backgroundColor: 'rgba(90, 106, 122, 0.5)',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#6a7a8a',
+  },
+  energyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  energyLabel: {
+    color: '#faca3a',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  energyCount: {
+    color: '#4aca4a',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  devButton: {
+    backgroundColor: '#ca4aca',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  devButtonText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  energyBarContainer: {
+    height: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 4,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  energyBarFill: {
+    height: '100%',
+    backgroundColor: '#4aca4a',
+    borderRadius: 4,
+  },
+  energyHint: {
+    color: '#9aaa9a',
+    fontSize: 10,
+    textAlign: 'center',
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  adButton: {
+    backgroundColor: 'rgba(138, 90, 202, 0.3)',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#9a5aca',
+  },
+  adButtonText: {
+    color: '#ca9aca',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  rewardModal: {
+    backgroundColor: '#4a5a6a',
+    borderRadius: 15,
+    padding: 20,
+    width: '80%',
+    borderWidth: 1,
+    borderColor: '#6a7a8a',
+  },
+  rewardDescription: {
+    color: '#9aaa9a',
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 15,
+  },
+  rewardOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#5a6a7a',
+  },
+  rewardIcon: {
+    fontSize: 32,
+    marginRight: 15,
+  },
+  rewardInfo: {
+    flex: 1,
+  },
+  rewardName: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  rewardAmount: {
+    color: '#faca3a',
+    fontSize: 12,
   },
 });
 

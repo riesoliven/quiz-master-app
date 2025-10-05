@@ -31,7 +31,9 @@ const HelperSelectScreen = ({ navigation }) => {
     { key: 'History', icon: '🏛️' },
     { key: 'Sports & Entertainment', icon: '⚽' },
     { key: 'Literature', icon: '📚' },
-    { key: 'Astronomy', icon: '🔭' }
+    { key: 'Astronomy', icon: '🔭' },
+    { key: 'Geography', icon: '🌍' },
+    { key: 'Technology', icon: '💻' }
   ];
 
   const isHelperSelected = (helper) => {

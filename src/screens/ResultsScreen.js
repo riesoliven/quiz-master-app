@@ -20,6 +20,7 @@ import {
   saveScoreRecord
 } from '../services/leaderboardService';
 import { awardCoinsForScore } from '../services/coinService';
+import { awardGemsForPerfectQuiz, GEM_REWARD_PERFECT_QUIZ } from '../services/gemService';
 
 const ResultsScreen = ({ route, navigation }) => {
   const {
@@ -43,6 +44,8 @@ const ResultsScreen = ({ route, navigation }) => {
   const [isNewHighScore, setIsNewHighScore] = useState(false);
   const [previousHighScore, setPreviousHighScore] = useState(0);
   const [coinsEarned, setCoinsEarned] = useState(0);
+  const [gemsEarned, setGemsEarned] = useState(0);
+  const [isPerfectQuiz, setIsPerfectQuiz] = useState(false);
 
   useEffect(() => {
     // Load high scores and calculate rank
@@ -127,7 +130,14 @@ const ResultsScreen = ({ route, navigation }) => {
       const coins = await awardCoinsForScore(user.uid, finalScore);
       setCoinsEarned(coins);
 
-      // Refresh user profile to show updated coin balance
+      // Check for perfect quiz (14/14) and award gems
+      if (questionsAnswered === totalQuestions && totalQuestions === 14) {
+        setIsPerfectQuiz(true);
+        const gems = await awardGemsForPerfectQuiz(user.uid);
+        setGemsEarned(gems);
+      }
+
+      // Refresh user profile to show updated coin/gem balance
       await refreshUserProfile();
 
     } catch (error) {
@@ -234,6 +244,19 @@ const ResultsScreen = ({ route, navigation }) => {
             />
           ))}
         </View>
+
+        {/* Perfect Quiz Banner - Show if user got 14/14 */}
+        {isPerfectQuiz && (
+          <View style={styles.perfectQuizBanner}>
+            <Text style={styles.perfectQuizText}>✨ PERFECT QUIZ! ✨</Text>
+            <Text style={styles.perfectQuizSubtext}>
+              14/14 Correct - Flawless Victory!
+            </Text>
+            <Text style={styles.gemRewardText}>
+              +{gemsEarned} 💎 Gems Earned!
+            </Text>
+          </View>
+        )}
 
         {/* New High Score Banner - Only show when it's actually a new personal best */}
         {isNewHighScore && (
@@ -407,6 +430,33 @@ const styles = StyleSheet.create({
     color: '#faca3a',
     fontSize: 48,
     fontWeight: 'bold',
+  },
+  perfectQuizBanner: {
+    backgroundColor: 'rgba(250, 202, 58, 0.3)',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 15,
+    borderWidth: 2,
+    borderColor: '#faca3a',
+  },
+  perfectQuizText: {
+    color: '#faca3a',
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  perfectQuizSubtext: {
+    color: 'white',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  gemRewardText: {
+    color: '#ca9aca',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
   newHighScoreBanner: {
     backgroundColor: 'rgba(74, 202, 74, 0.3)',

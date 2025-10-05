@@ -35,7 +35,9 @@ const SubmitQuestionScreen = ({ navigation }) => {
     'History',
     'Sports & Entertainment',
     'Literature',
-    'Astronomy'
+    'Astronomy',
+    'Geography',
+    'Technology'
   ];
 
   const difficulties = ['easy', 'average', 'difficult', 'impossible'];

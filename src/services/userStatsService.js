@@ -33,7 +33,9 @@ export const initializeUserStats = async (userId) => {
           'History': { correct: 0, total: 0, accuracy: 0 },
           'Sports & Entertainment': { correct: 0, total: 0, accuracy: 0 },
           'Literature': { correct: 0, total: 0, accuracy: 0 },
-          'Astronomy': { correct: 0, total: 0, accuracy: 0 }
+          'Astronomy': { correct: 0, total: 0, accuracy: 0 },
+          'Geography': { correct: 0, total: 0, accuracy: 0 },
+          'Technology': { correct: 0, total: 0, accuracy: 0 }
         },
         lastUpdated: serverTimestamp()
       });
