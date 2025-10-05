@@ -75,6 +75,7 @@ const SignupScreen = ({ navigation }) => {
         totalGamesPlayed: 0,
         coins: 500, // Starting coins - enough for 5 games
         gems: 0,
+        isAdmin: false,
       });
 
       // Create initial leaderboard entry

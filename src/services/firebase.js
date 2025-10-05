@@ -33,5 +33,7 @@ export const COLLECTIONS = {
   USERS: 'users',
   LEADERBOARD: 'leaderboard',
   SCORES: 'scores',
-  USER_STATS: 'userStats'
+  USER_STATS: 'userStats',
+  QUESTIONS: 'questions',
+  PENDING_QUESTIONS: 'pendingQuestions'
 };

@@ -7,19 +7,21 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-  Modal
+  Modal,
+  ActivityIndicator
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { 
-  questionDatabase, 
-  addQuestion, 
-  loadQuestionsFromJSON,
-  exportQuestionsToJSON 
-} from '../data/questions';
+import {
+  addQuestion,
+  getQuestionStats
+} from '../services/questionService';
+import { migrateQuestionsToFirestore } from '../services/migrateQuestionsToFirestore';
+import { useAuth } from '../context/AuthContext';
 
 const QuestionManagerScreen = ({ navigation }) => {
+  const { userProfile } = useAuth();
   const [showAddModal, setShowAddModal] = useState(false);
   const [questionStats, setQuestionStats] = useState({});
   const [newQuestion, setNewQuestion] = useState({
@@ -33,45 +35,52 @@ const QuestionManagerScreen = ({ navigation }) => {
     tags: []
   });
 
+  const [loading, setLoading] = useState(false);
+
   useEffect(() => {
-    calculateStats();
+    loadStats();
   }, []);
 
-  const calculateStats = () => {
-    const stats = {};
-    Object.entries(questionDatabase).forEach(([subject, data]) => {
-      stats[subject] = {
-        easy: data.easy?.length || 0,
-        average: data.average?.length || 0,
-        difficult: data.difficult?.length || 0,
-        impossible: data.impossible?.length || 0,
-        total: (data.easy?.length || 0) + (data.average?.length || 0) + 
-               (data.difficult?.length || 0) + (data.impossible?.length || 0)
-      };
-    });
-    setQuestionStats(stats);
+  const loadStats = async () => {
+    try {
+      setLoading(true);
+      const stats = await getQuestionStats();
+      setQuestionStats(stats);
+    } catch (error) {
+      console.error('Error loading stats:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleAddQuestion = () => {
+  const handleAddQuestion = async () => {
     if (!newQuestion.question || newQuestion.answers.some(a => !a)) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
-    addQuestion(newQuestion);
-    Alert.alert('Success', 'Question added successfully!');
-    setShowAddModal(false);
-    setNewQuestion({
-      subject: 'Mathematics',
-      difficulty: 'easy',
-      question: '',
+    try {
+      setLoading(true);
+      await addQuestion(newQuestion);
+      Alert.alert('Success', 'Question added successfully!');
+      setShowAddModal(false);
+      setNewQuestion({
+        subject: 'Mathematics',
+        difficulty: 'easy',
+        question: '',
       answers: ['', '', '', ''],
       correct: 0,
       explanation: '',
       points: 100,
       tags: []
     });
-    calculateStats();
+      await loadStats(); // Reload stats after adding
+    } catch (error) {
+      console.error('Error adding question:', error);
+      Alert.alert('Error', 'Failed to add question. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const importCSV = async () => {
@@ -82,15 +91,20 @@ const QuestionManagerScreen = ({ navigation }) => {
       });
 
       if (result.type === 'success') {
+        setLoading(true);
         const content = await FileSystem.readAsStringAsync(result.uri);
         const questions = parseCSV(content);
-        
-        questions.forEach(q => addQuestion(q));
-        calculateStats();
+
+        for (const q of questions) {
+          await addQuestion(q);
+        }
+        await loadStats();
         Alert.alert('Success', `Imported ${questions.length} questions!`);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to import CSV');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -118,23 +132,10 @@ const QuestionManagerScreen = ({ navigation }) => {
   };
 
   const exportQuestions = async () => {
-    try {
-      const json = exportQuestionsToJSON();
-      const fileUri = FileSystem.documentDirectory + 'questions.json';
-      
-      await FileSystem.writeAsStringAsync(fileUri, json);
-      
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(fileUri);
-      } else {
-        Alert.alert('Success', 'Questions exported to: ' + fileUri);
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to export questions');
-    }
+    Alert.alert('Info', 'Export feature is now handled directly by Firestore. Use Firebase Console to export questions.');
   };
 
-  const generateSampleQuestions = () => {
+  const generateSampleQuestions = async () => {
     const samples = [
       {
         subject: 'Mathematics',
@@ -170,9 +171,49 @@ const QuestionManagerScreen = ({ navigation }) => {
       }
     ];
 
-    samples.forEach(q => addQuestion(q));
-    calculateStats();
-    Alert.alert('Success', 'Sample questions added!');
+    try {
+      setLoading(true);
+      for (const q of samples) {
+        await addQuestion(q);
+      }
+      await loadStats();
+      Alert.alert('Success', 'Sample questions added!');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to add sample questions');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMigration = async () => {
+    Alert.alert(
+      'Migrate Questions',
+      'This will upload all questions from questions.js to Firestore. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Migrate',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              const result = await migrateQuestionsToFirestore((progress) => {
+                console.log(progress);
+              });
+              await loadStats();
+              Alert.alert(
+                'Migration Complete',
+                `Total: ${result.total}\nSuccess: ${result.success}\nErrors: ${result.errors}`
+              );
+            } catch (error) {
+              console.error('Migration error:', error);
+              Alert.alert('Error', 'Migration failed: ' + error.message);
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   return (
@@ -222,7 +263,26 @@ const QuestionManagerScreen = ({ navigation }) => {
           <Text style={styles.actionIcon}>🎲</Text>
           <Text style={styles.actionText}>Add Samples</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity style={[styles.actionButton, {backgroundColor: '#ff6b35'}]} onPress={handleMigration}>
+          <Text style={styles.actionIcon}>🚀</Text>
+          <Text style={styles.actionText}>Migrate to Firestore</Text>
+        </TouchableOpacity>
+
+        {userProfile?.isAdmin && (
+          <TouchableOpacity style={[styles.actionButton, {backgroundColor: '#4aca4a'}]} onPress={() => navigation.navigate('ApproveQuestions')}>
+            <Text style={styles.actionIcon}>✓</Text>
+            <Text style={styles.actionText}>Approve Questions</Text>
+          </TouchableOpacity>
+        )}
       </View>
+
+      {loading && (
+        <View style={{padding: 20, alignItems: 'center'}}>
+          <ActivityIndicator size="large" color="#faca3a" />
+          <Text style={{color: '#fff', marginTop: 10}}>Processing...</Text>
+        </View>
+      )}
 
       {/* CSV Template */}
       <View style={styles.templateContainer}>
@@ -246,7 +306,7 @@ const QuestionManagerScreen = ({ navigation }) => {
               {/* Subject Selector */}
               <Text style={styles.inputLabel}>Subject:</Text>
               <View style={styles.subjectSelector}>
-                {Object.keys(questionDatabase).map(subject => (
+                {['Arithmetic & Algebra', 'Geometry & Trigonometry', 'Statistics & Probability', 'Physics', 'Chemistry', 'Biology', 'History', 'Sports & Entertainment', 'Literature', 'Astronomy'].map(subject => (
                   <TouchableOpacity
                     key={subject}
                     style={[

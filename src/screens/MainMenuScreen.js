@@ -18,6 +18,8 @@ import { getTopLeaderboard } from '../services/leaderboardService';
 import { getTopSubjects } from '../services/userStatsService';
 import { canAffordGame, spendCoinsForGame, awardCoinsForAd, GAME_COST } from '../services/coinService';
 import { initializeRewardedAd, showRewardedAd, isRewardedAdReady } from '../services/adService';
+import { doc, updateDoc } from 'firebase/firestore';
+import { firestore, COLLECTIONS } from '../services/firebase';
 import Constants from 'expo-constants';
 
 const { width, height } = Dimensions.get('window');
@@ -92,11 +94,26 @@ const MainMenuScreen = ({ navigation }) => {
     }, 2000);
   };
 
-  const handlePasswordSubmit = () => {
+  const handlePasswordSubmit = async () => {
     if (verifyAdminPassword(passwordInput)) {
-      setShowPasswordModal(false);
-      setPasswordInput('');
-      navigation.navigate('QuestionManager');
+      try {
+        // Update user document to set isAdmin = true
+        const userDocRef = doc(firestore, COLLECTIONS.USERS, user.uid);
+        await updateDoc(userDocRef, {
+          isAdmin: true
+        });
+
+        // Refresh user profile to get updated isAdmin status
+        await refreshUserProfile();
+
+        setShowPasswordModal(false);
+        setPasswordInput('');
+        Alert.alert('Success', 'Admin access granted!');
+        navigation.navigate('QuestionManager');
+      } catch (error) {
+        console.error('Error setting admin status:', error);
+        Alert.alert('Error', 'Failed to grant admin access');
+      }
     } else {
       Alert.alert('Access Denied', 'Incorrect password');
       setPasswordInput('');
@@ -300,8 +317,11 @@ const MainMenuScreen = ({ navigation }) => {
               <Text style={styles.playCostText}>Cost: {GAME_COST} 🪙</Text>
             </Pressable>
 
-            <Pressable style={styles.secondaryButton}>
-              <Text style={styles.secondaryButtonText}>USE YOUR 🪙</Text>
+            <Pressable
+              style={styles.secondaryButton}
+              onPress={() => navigation.navigate('SubmitQuestion')}
+            >
+              <Text style={styles.secondaryButtonText}>➕ SUBMIT QUESTION</Text>
             </Pressable>
 
             <Pressable style={styles.secondaryButton}>

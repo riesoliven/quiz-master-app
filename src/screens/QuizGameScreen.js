@@ -7,9 +7,10 @@ import {
   ScrollView,
   Animated,
   Alert,
-  BackHandler
+  BackHandler,
+  ActivityIndicator
 } from 'react-native';
-import { getQuizQuestions } from '../data/questions';
+import { getQuizQuestions } from '../services/questionService';
 import { calculateBonusPoints, getSubjectOfTheDay } from '../services/dailySubject';
 import { useAuth } from '../context/AuthContext';
 import { updateUserStats } from '../services/userStatsService';
@@ -43,7 +44,8 @@ const shuffleAnswers = (question) => {
 const QuizGameScreen = ({ route, navigation }) => {
   const { helpers } = route.params;
   const { user } = useAuth();
-  const [questions] = useState(() => getQuizQuestions().map(q => shuffleAnswers(q)));
+  const [questions, setQuestions] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [score, setScore] = useState(0);
   const [correctAnswers, setCorrectAnswers] = useState(0);
@@ -57,21 +59,43 @@ const QuizGameScreen = ({ route, navigation }) => {
   const [quizComplete, setQuizComplete] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(1));
   const [dailySubject] = useState(getSubjectOfTheDay());
-
-  const question = questions[currentQuestion];
-  const isBonusQuestion = question.subject === dailySubject.subject;
-  const questionNumber = currentQuestion + 1;
-  // Use the actual difficulty from the question data
-  const difficulty = question.difficulty ? question.difficulty.toUpperCase() : 'EASY';
+  const [questionStartTime, setQuestionStartTime] = useState(Date.now());
 
   // Calculate time bonus based on streak
   const getTimeBonus = (currentStreak) => {
-    if (currentStreak >= 10) return 6;
-    if (currentStreak >= 7) return 5;
-    if (currentStreak >= 4) return 4;
-    if (currentStreak >= 2) return 3;
+    if (currentStreak >= 10) return 3;
+    if (currentStreak >= 7) return 2.5;
+    if (currentStreak >= 4) return 2;
+    if (currentStreak >= 2) return 1;
     return 0;
   };
+
+  // Calculate per-question speed bonus
+  const getSpeedBonus = (timeElapsed) => {
+    if (timeElapsed <= 5) return 50;
+    if (timeElapsed <= 10) return 30;
+    if (timeElapsed <= 15) return 10;
+    return 0;
+  };
+
+  // Load questions from Firestore
+  useEffect(() => {
+    const loadQuestions = async () => {
+      try {
+        setLoading(true);
+        const fetchedQuestions = await getQuizQuestions();
+        const shuffled = fetchedQuestions.map(q => shuffleAnswers(q));
+        setQuestions(shuffled);
+      } catch (error) {
+        console.error('Error loading questions:', error);
+        Alert.alert('Error', 'Failed to load questions. Please try again.');
+        navigation.goBack();
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadQuestions();
+  }, []);
 
   // Main timer for entire quiz
   useEffect(() => {
@@ -177,9 +201,14 @@ const QuizGameScreen = ({ route, navigation }) => {
     }]);
 
     if (isCorrect) {
-      // Calculate points with daily subject bonus
+      // Calculate speed bonus based on time elapsed
+      const timeElapsed = Math.floor((Date.now() - questionStartTime) / 1000);
+      const speedBonus = getSpeedBonus(timeElapsed);
+
+      // Calculate points with daily subject bonus (applies to base + speed)
       const basePoints = question.points;
-      const bonusCalc = calculateBonusPoints(basePoints, question.subject);
+      const totalBeforeBonus = basePoints + speedBonus;
+      const bonusCalc = calculateBonusPoints(totalBeforeBonus, question.subject);
 
       setScore(prev => prev + bonusCalc.total);
       setCorrectAnswers(prev => prev + 1);
@@ -209,6 +238,7 @@ const QuizGameScreen = ({ route, navigation }) => {
       setSelectedAnswer(null);
       setIsAnswered(false);
       setHelperSuggestion(null);
+      setQuestionStartTime(Date.now()); // Reset timer for next question
     } else {
       // Quiz complete - calculate final score
       handleQuizComplete();
@@ -219,8 +249,8 @@ const QuizGameScreen = ({ route, navigation }) => {
   setQuizComplete(true);
 
   // Calculate final score with time bonus
-  const timeBonus = totalTimer * 10;
-  const completionBonus = 500;
+  const timeBonus = totalTimer * 4;
+  const completionBonus = 300;
   const finalScore = score + timeBonus + completionBonus;
 
   // Update user stats with question results
@@ -281,12 +311,28 @@ const QuizGameScreen = ({ route, navigation }) => {
   };
 
   const getStreakMessage = () => {
-    if (streak >= 10) return '🔥 ON FIRE! +6s per correct';
-    if (streak >= 7) return '⚡ UNSTOPPABLE! +5s per correct';
-    if (streak >= 4) return '💪 GREAT! +4s per correct';
-    if (streak >= 2) return '👍 NICE! +3s per correct';
+    if (streak >= 10) return '🔥 ON FIRE! +3s per correct';
+    if (streak >= 7) return '⚡ UNSTOPPABLE! +2.5s per correct';
+    if (streak >= 4) return '💪 GREAT! +2s per correct';
+    if (streak >= 2) return '👍 NICE! +1s per correct';
     return '';
   };
+
+  // Show loading screen while fetching questions
+  if (loading || questions.length === 0) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#faca3a" />
+        <Text style={[styles.timerText, { marginTop: 20 }]}>Loading quiz...</Text>
+      </View>
+    );
+  }
+
+  const question = questions[currentQuestion];
+  const isBonusQuestion = question.subject === dailySubject.subject;
+  const questionNumber = currentQuestion + 1;
+  // Use the actual difficulty from the question data
+  const difficulty = question.difficulty ? question.difficulty.toUpperCase() : 'EASY';
 
   return (
     <ScrollView style={styles.container}>
@@ -417,10 +463,22 @@ const QuizGameScreen = ({ route, navigation }) => {
             <Text style={styles.feedbackText}>
               {selectedAnswer === question.correct
                 ? (() => {
-                    const bonusCalc = calculateBonusPoints(question.points, question.subject);
-                    return bonusCalc.isBonusQuestion
-                      ? `✅ Correct! +${question.points} pts + ${bonusCalc.bonus} BONUS = ${bonusCalc.total} pts!`
-                      : `✅ Correct! +${question.points} pts`;
+                    const timeElapsed = Math.floor((Date.now() - questionStartTime) / 1000);
+                    const speedBonus = getSpeedBonus(timeElapsed);
+                    const basePoints = question.points;
+                    const totalBeforeBonus = basePoints + speedBonus;
+                    const bonusCalc = calculateBonusPoints(totalBeforeBonus, question.subject);
+
+                    let message = `✅ Correct! +${basePoints} pts`;
+                    if (speedBonus > 0) {
+                      message += ` + ${speedBonus} SPEED`;
+                    }
+                    if (bonusCalc.isBonusQuestion) {
+                      message += ` × 120% = ${bonusCalc.total} pts!`;
+                    } else {
+                      message += ` = ${bonusCalc.total} pts!`;
+                    }
+                    return message;
                   })()
                 : '❌ Wrong Answer - Streak Lost!'}
             </Text>
