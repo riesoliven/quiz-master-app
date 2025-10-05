@@ -405,6 +405,13 @@ const MainMenuScreen = ({ navigation }) => {
 
             <Pressable
               style={styles.secondaryButton}
+              onPress={() => navigation.navigate('Shop')}
+            >
+              <Text style={styles.secondaryButtonText}>🛒 SHOP</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.secondaryButton}
               onPress={() => navigation.navigate('SubmitQuestion')}
             >
               <Text style={styles.secondaryButtonText}>➕ SUBMIT QUESTION</Text>

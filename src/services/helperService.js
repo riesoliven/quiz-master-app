@@ -1,5 +1,6 @@
 import { doc, getDoc, updateDoc, increment } from 'firebase/firestore';
 import { firestore, COLLECTIONS } from './firebase';
+import { getHelperById } from '../data/helpers';
 
 // Helper unlock costs (in coins)
 export const HELPER_COSTS = {
@@ -10,12 +11,22 @@ export const HELPER_COSTS = {
   LEGENDARY: 50000
 };
 
-// EXP required per level
+// EXP required per level (level is now just a prestige indicator)
 export const EXP_PER_LEVEL = 100;
 export const MAX_HELPER_LEVEL = 10;
 
 // Coins to EXP conversion
 export const COINS_PER_EXP = 10; // 10 coins = 1 EXP
+
+// NBA 2K-style rating upgrade costs (EXP per +1 rating point)
+// Cost increases exponentially as ratings get higher
+export const getRatingUpgradeCost = (currentRating) => {
+  if (currentRating < 50) return 5;        // 25-49: 5 EXP per point
+  if (currentRating < 70) return 10;       // 50-69: 10 EXP per point
+  if (currentRating < 85) return 20;       // 70-84: 20 EXP per point
+  if (currentRating < 95) return 50;       // 85-94: 50 EXP per point
+  return 100;                              // 95-99: 100 EXP per point
+};
 
 /**
  * Get user's helper data
@@ -57,12 +68,22 @@ export const unlockHelper = async (userId, helperId, cost) => {
       return false;
     }
 
-    // Unlock helper and deduct coins
+    // Get base ratings from helper definition
+    const helperDef = getHelperById(helperId);
+    if (!helperDef) return false;
+
+    const ratings = {};
+    Object.keys(helperDef.ratings).forEach(subject => {
+      ratings[subject] = helperDef.ratings[subject].base;
+    });
+
+    // Unlock helper with base ratings and deduct coins
     const userDocRef = doc(firestore, COLLECTIONS.USERS, userId);
     await updateDoc(userDocRef, {
       [`helpers.${helperId}.unlocked`]: true,
       [`helpers.${helperId}.level`]: 1,
       [`helpers.${helperId}.exp`]: 0,
+      [`helpers.${helperId}.ratings`]: ratings,
       coins: increment(-cost)
     });
 
@@ -74,7 +95,7 @@ export const unlockHelper = async (userId, helperId, cost) => {
 };
 
 /**
- * Add EXP to a helper (from gameplay)
+ * Add EXP to a helper (from gameplay) - used for level progression
  * @param {string} userId
  * @param {string} helperId
  * @param {number} expAmount
@@ -122,66 +143,139 @@ export const addHelperEXP = async (userId, helperId, expAmount) => {
 };
 
 /**
- * Buy EXP with coins
+ * Upgrade a specific subject rating by 1 point (NBA 2K style)
  * @param {string} userId
  * @param {string} helperId
- * @param {number} coinsToSpend
- * @returns {Promise<{success: boolean, expGained: number, leveledUp: boolean}>}
+ * @param {string} subject
+ * @returns {Promise<{success: boolean, newRating: number, expSpent: number, expRemaining: number}>}
  */
-export const buyHelperEXP = async (userId, helperId, coinsToSpend) => {
+export const upgradeSubjectRating = async (userId, helperId, subject) => {
   try {
     const userDoc = await getDoc(doc(firestore, COLLECTIONS.USERS, userId));
-    if (!userDoc.exists()) return { success: false, expGained: 0, leveledUp: false };
+    if (!userDoc.exists()) return { success: false, newRating: 0, expSpent: 0, expRemaining: 0 };
+
+    const helpers = userDoc.data().helpers || {};
+    const helper = helpers[helperId];
+
+    if (!helper?.unlocked) {
+      console.error('Helper not unlocked');
+      return { success: false, newRating: 0, expSpent: 0, expRemaining: 0 };
+    }
+
+    // Get helper definition to check potential cap
+    const helperDef = getHelperById(helperId);
+    if (!helperDef) return { success: false, newRating: 0, expSpent: 0, expRemaining: 0 };
+
+    const currentRating = helper.ratings?.[subject] || helperDef.ratings[subject].base;
+    const potentialCap = helperDef.ratings[subject].potential;
+
+    // Check if already at potential cap
+    if (currentRating >= potentialCap) {
+      console.error('Rating already at maximum potential');
+      return { success: false, newRating: currentRating, expSpent: 0, expRemaining: helper.exp || 0 };
+    }
+
+    // Calculate upgrade cost based on current rating
+    const upgradeCost = getRatingUpgradeCost(currentRating);
+    const currentExp = helper.exp || 0;
+
+    // Check if enough EXP
+    if (currentExp < upgradeCost) {
+      console.error('Not enough EXP to upgrade rating');
+      return { success: false, newRating: currentRating, expSpent: 0, expRemaining: currentExp };
+    }
+
+    // Upgrade the rating
+    const newRating = currentRating + 1;
+    const newExp = currentExp - upgradeCost;
+
+    const userDocRef = doc(firestore, COLLECTIONS.USERS, userId);
+    await updateDoc(userDocRef, {
+      [`helpers.${helperId}.ratings.${subject}`]: newRating,
+      [`helpers.${helperId}.exp`]: newExp
+    });
+
+    return {
+      success: true,
+      newRating,
+      expSpent: upgradeCost,
+      expRemaining: newExp
+    };
+  } catch (error) {
+    console.error('Error upgrading subject rating:', error);
+    return { success: false, newRating: 0, expSpent: 0, expRemaining: 0 };
+  }
+};
+
+/**
+ * Buy EXP with coins
+ * @param {string} userId
+ * @param {number} coinsToSpend
+ * @returns {Promise<{success: boolean, expGained: number}>}
+ */
+export const buyEXPWithCoins = async (userId, coinsToSpend) => {
+  try {
+    const userDoc = await getDoc(doc(firestore, COLLECTIONS.USERS, userId));
+    if (!userDoc.exists()) return { success: false, expGained: 0 };
 
     const currentCoins = userDoc.data().coins || 0;
     if (currentCoins < coinsToSpend) {
       console.error('Not enough coins');
-      return { success: false, expGained: 0, leveledUp: false };
+      return { success: false, expGained: 0 };
     }
 
     const expGained = Math.floor(coinsToSpend / COINS_PER_EXP);
     if (expGained === 0) {
       console.error('Not enough coins to gain EXP (minimum 10 coins)');
-      return { success: false, expGained: 0, leveledUp: false };
+      return { success: false, expGained: 0 };
     }
 
-    // Deduct coins
+    // Deduct coins (EXP will be added to individual helpers when upgrading)
     const userDocRef = doc(firestore, COLLECTIONS.USERS, userId);
     await updateDoc(userDocRef, {
       coins: increment(-coinsToSpend)
     });
 
-    // Add EXP
-    const result = await addHelperEXP(userId, helperId, expGained);
-
     return {
       success: true,
-      expGained,
-      leveledUp: result.leveledUp,
-      newLevel: result.newLevel
+      expGained
     };
   } catch (error) {
-    console.error('Error buying helper EXP:', error);
-    return { success: false, expGained: 0, leveledUp: false };
+    console.error('Error buying EXP:', error);
+    return { success: false, expGained: 0 };
   }
 };
 
 /**
- * Calculate helper's current rating for a subject
- * @param {Object} helper - helper data with base/potential ratings
- * @param {number} level - helper's current level (1-10)
+ * Add EXP directly to a specific helper (for coin-to-exp conversion)
+ * @param {string} userId
+ * @param {string} helperId
+ * @param {number} expAmount
+ * @returns {Promise<boolean>}
+ */
+export const addEXPToHelper = async (userId, helperId, expAmount) => {
+  try {
+    const userDocRef = doc(firestore, COLLECTIONS.USERS, userId);
+    await updateDoc(userDocRef, {
+      [`helpers.${helperId}.exp`]: increment(expAmount)
+    });
+    return true;
+  } catch (error) {
+    console.error('Error adding EXP to helper:', error);
+    return false;
+  }
+};
+
+/**
+ * Get helper's current rating for a subject
+ * @param {Object} userHelper - user's helper data from Firebase
+ * @param {Object} helperDef - helper definition from helpers.js
  * @param {string} subject
  * @returns {number} current rating
  */
-export const calculateHelperRating = (helper, level, subject) => {
-  const baseRating = helper.ratings[subject]?.base || 0;
-  const potentialRating = helper.ratings[subject]?.potential || baseRating;
-
-  // Linear interpolation between base and potential
-  const progress = (level - 1) / (MAX_HELPER_LEVEL - 1); // 0 to 1
-  const currentRating = Math.round(baseRating + (potentialRating - baseRating) * progress);
-
-  return currentRating;
+export const getHelperRating = (userHelper, helperDef, subject) => {
+  // Return user's upgraded rating, or base rating if not yet set
+  return userHelper?.ratings?.[subject] || helperDef.ratings[subject].base;
 };
 
 /**

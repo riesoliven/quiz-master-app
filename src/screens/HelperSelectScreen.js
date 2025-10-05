@@ -9,11 +9,12 @@ import {
   Dimensions,
   FlatList,
   BackHandler,
-  ActivityIndicator
+  ActivityIndicator,
+  Image
 } from 'react-native';
-import { helpers } from '../data/helpers';
+import { helpers, getHelperById } from '../data/helpers';
 import { useAuth } from '../context/AuthContext';
-import { getUserHelpers, unlockHelper, calculateHelperRating, HELPER_COSTS } from '../services/helperService';
+import { getUserHelpers, unlockHelper, getHelperRating, HELPER_COSTS } from '../services/helperService';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.75;
@@ -161,7 +162,7 @@ const HelperSelectScreen = ({ navigation }) => {
 
           {/* Helper Icon/Avatar */}
           <View style={styles.helperIconContainer}>
-            <Text style={[styles.helperIcon, !unlocked && styles.lockedIcon]}>{helper.icon}</Text>
+            <Image source={helper.image} style={[styles.helperImage, !unlocked && styles.lockedImage]} />
             {selected && unlocked && (
               <View style={styles.selectedBadge}>
                 <Text style={styles.selectedBadgeText}>✓</Text>
@@ -199,10 +200,12 @@ const HelperSelectScreen = ({ navigation }) => {
             <Text style={styles.ratingsHeader}>Subject Expertise</Text>
             <ScrollView style={styles.ratingsList} showsVerticalScrollIndicator={false}>
               {subjects.map(subject => {
+                const helperDef = getHelperById(helper.id);
+                const userHelper = userHelpers[helper.id];
                 const currentRating = unlocked
-                  ? calculateHelperRating(helper, level, subject.key)
-                  : helper.ratings[subject.key]?.base || 0;
-                const potentialRating = helper.ratings[subject.key]?.potential || currentRating;
+                  ? getHelperRating(userHelper, helperDef, subject.key)
+                  : helperDef.ratings[subject.key]?.base || 0;
+                const potentialRating = helperDef.ratings[subject.key]?.potential || currentRating;
 
                 return (
                   <View key={subject.key} style={styles.ratingRow}>
@@ -227,7 +230,7 @@ const HelperSelectScreen = ({ navigation }) => {
                       ]}
                     >
                       {currentRating}
-                      {unlocked && level < 10 && (
+                      {unlocked && currentRating < potentialRating && (
                         <Text style={styles.potentialRating}>→{potentialRating}</Text>
                       )}
                     </Text>
@@ -296,7 +299,7 @@ const HelperSelectScreen = ({ navigation }) => {
             <View key={index} style={[styles.slot, selectedHelpers[index] && styles.slotFilled]}>
               {selectedHelpers[index] ? (
                 <>
-                  <Text style={styles.slotIcon}>{selectedHelpers[index].icon}</Text>
+                  <Image source={selectedHelpers[index].image} style={styles.slotImage} />
                   <Text style={styles.slotName}>{selectedHelpers[index].name}</Text>
                 </>
               ) : (
@@ -434,8 +437,10 @@ const styles = StyleSheet.create({
     borderColor: '#4aca4a',
     backgroundColor: 'rgba(74, 202, 74, 0.2)',
   },
-  slotIcon: {
-    fontSize: 28,
+  slotImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     marginBottom: 4,
   },
   slotName: {
@@ -497,10 +502,12 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     position: 'relative',
   },
-  helperIcon: {
-    fontSize: 80,
+  helperImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
   },
-  lockedIcon: {
+  lockedImage: {
     opacity: 0.3,
   },
   selectedBadge: {

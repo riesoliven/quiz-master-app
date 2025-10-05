@@ -15,6 +15,7 @@ import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { collection, query, where, getDocs, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, firestore, COLLECTIONS } from '../services/firebase';
 import { initializeUserStats } from '../services/userStatsService';
+import { getHelperById } from '../data/helpers';
 
 const AVATARS = ['🧑‍🎓', '👨‍💻', '👩‍🔬', '🧙‍♂️', '🦸‍♀️', '🤓', '🧑‍🚀', '👩‍🎨'];
 
@@ -79,10 +80,64 @@ const SignupScreen = ({ navigation }) => {
         lastEnergyUpdate: serverTimestamp(),
         isAdmin: false,
         helpers: {
-          // Start with 3 FREE helpers unlocked
-          'max_chen': { unlocked: true, level: 1, exp: 0 },
-          'coach_rivera': { unlocked: true, level: 1, exp: 0 },
-          'luna_page': { unlocked: true, level: 1, exp: 0 }
+          // Start with 3 FREE helpers unlocked with base ratings
+          'sir_sam': {
+            unlocked: true,
+            level: 1,
+            exp: 0,
+            ratings: {
+              'Arithmetic & Algebra': getHelperById('sir_sam').ratings['Arithmetic & Algebra'].base,
+              'Geometry & Trigonometry': getHelperById('sir_sam').ratings['Geometry & Trigonometry'].base,
+              'Statistics & Probability': getHelperById('sir_sam').ratings['Statistics & Probability'].base,
+              'Physics': getHelperById('sir_sam').ratings['Physics'].base,
+              'Chemistry': getHelperById('sir_sam').ratings['Chemistry'].base,
+              'Biology': getHelperById('sir_sam').ratings['Biology'].base,
+              'History': getHelperById('sir_sam').ratings['History'].base,
+              'Sports & Entertainment': getHelperById('sir_sam').ratings['Sports & Entertainment'].base,
+              'Literature': getHelperById('sir_sam').ratings['Literature'].base,
+              'Astronomy': getHelperById('sir_sam').ratings['Astronomy'].base,
+              'Geography': getHelperById('sir_sam').ratings['Geography'].base,
+              'Technology': getHelperById('sir_sam').ratings['Technology'].base
+            }
+          },
+          'manny_pacquiao': {
+            unlocked: true,
+            level: 1,
+            exp: 0,
+            ratings: {
+              'Arithmetic & Algebra': getHelperById('manny_pacquiao').ratings['Arithmetic & Algebra'].base,
+              'Geometry & Trigonometry': getHelperById('manny_pacquiao').ratings['Geometry & Trigonometry'].base,
+              'Statistics & Probability': getHelperById('manny_pacquiao').ratings['Statistics & Probability'].base,
+              'Physics': getHelperById('manny_pacquiao').ratings['Physics'].base,
+              'Chemistry': getHelperById('manny_pacquiao').ratings['Chemistry'].base,
+              'Biology': getHelperById('manny_pacquiao').ratings['Biology'].base,
+              'History': getHelperById('manny_pacquiao').ratings['History'].base,
+              'Sports & Entertainment': getHelperById('manny_pacquiao').ratings['Sports & Entertainment'].base,
+              'Literature': getHelperById('manny_pacquiao').ratings['Literature'].base,
+              'Astronomy': getHelperById('manny_pacquiao').ratings['Astronomy'].base,
+              'Geography': getHelperById('manny_pacquiao').ratings['Geography'].base,
+              'Technology': getHelperById('manny_pacquiao').ratings['Technology'].base
+            }
+          },
+          'annie_librarian': {
+            unlocked: true,
+            level: 1,
+            exp: 0,
+            ratings: {
+              'Arithmetic & Algebra': getHelperById('annie_librarian').ratings['Arithmetic & Algebra'].base,
+              'Geometry & Trigonometry': getHelperById('annie_librarian').ratings['Geometry & Trigonometry'].base,
+              'Statistics & Probability': getHelperById('annie_librarian').ratings['Statistics & Probability'].base,
+              'Physics': getHelperById('annie_librarian').ratings['Physics'].base,
+              'Chemistry': getHelperById('annie_librarian').ratings['Chemistry'].base,
+              'Biology': getHelperById('annie_librarian').ratings['Biology'].base,
+              'History': getHelperById('annie_librarian').ratings['History'].base,
+              'Sports & Entertainment': getHelperById('annie_librarian').ratings['Sports & Entertainment'].base,
+              'Literature': getHelperById('annie_librarian').ratings['Literature'].base,
+              'Astronomy': getHelperById('annie_librarian').ratings['Astronomy'].base,
+              'Geography': getHelperById('annie_librarian').ratings['Geography'].base,
+              'Technology': getHelperById('annie_librarian').ratings['Technology'].base
+            }
+          }
         }
       });
 

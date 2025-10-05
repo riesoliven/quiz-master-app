@@ -7,19 +7,22 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  TextInput
+  TextInput,
+  Image
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
-import { helpers } from '../data/helpers';
+import { helpers, getHelperById } from '../data/helpers';
 import {
   getUserHelpers,
-  unlockHelper,
-  buyHelperEXP,
-  calculateHelperRating,
-  getExpForNextLevel,
-  COINS_PER_EXP,
-  MAX_HELPER_LEVEL
+  upgradeSubjectRating,
+  addEXPToHelper,
+  buyEXPWithCoins,
+  getHelperRating,
+  getRatingUpgradeCost,
+  COINS_PER_EXP
 } from '../services/helperService';
+import { doc, updateDoc, getDoc } from 'firebase/firestore';
+import { firestore, COLLECTIONS } from '../services/firebase';
 
 const HelperUpgradeScreen = ({ navigation }) => {
   const { user, userProfile } = useAuth();
@@ -27,7 +30,8 @@ const HelperUpgradeScreen = ({ navigation }) => {
   const [coins, setCoins] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selectedHelper, setSelectedHelper] = useState(null);
-  const [coinsToSpend, setCoinsToSpend] = useState('');
+  const [expToBuy, setExpToBuy] = useState('');
+  const [plannedUpgrades, setPlannedUpgrades] = useState({}); // { subject: upgradeCount }
 
   const subjects = [
     { key: 'Arithmetic & Algebra', icon: '📐' },
@@ -48,12 +52,30 @@ const HelperUpgradeScreen = ({ navigation }) => {
     loadData();
   }, []);
 
+  useEffect(() => {
+    // Reset planned upgrades when switching helpers
+    setPlannedUpgrades({});
+  }, [selectedHelper]);
+
   const loadData = async () => {
     if (!user) return;
     try {
       const helpers = await getUserHelpers(user.uid);
       setUserHelpers(helpers);
-      setCoins(userProfile?.coins || 0);
+
+      // Fetch fresh coins balance from Firestore
+      const userDocRef = doc(firestore, COLLECTIONS.USERS, user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+      if (userDocSnap.exists()) {
+        setCoins(userDocSnap.data().coins || 0);
+      }
+
+      // Auto-select first unlocked helper
+      const unlockedHelpers = Object.keys(helpers).filter(id => helpers[id]?.unlocked);
+      if (unlockedHelpers.length > 0 && !selectedHelper) {
+        const firstHelper = getHelperById(unlockedHelpers[0]);
+        setSelectedHelper(firstHelper);
+      }
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -61,87 +83,182 @@ const HelperUpgradeScreen = ({ navigation }) => {
     }
   };
 
-  const handleUnlockHelper = async () => {
-    if (!selectedHelper) return;
-
-    if (coins < selectedHelper.cost) {
-      Alert.alert(
-        'Not Enough Coins',
-        `You need ${selectedHelper.cost} coins to unlock ${selectedHelper.name}. You have ${coins} coins.`
-      );
-      return;
-    }
-
-    Alert.alert(
-      'Unlock Helper',
-      `Unlock ${selectedHelper.name} for ${selectedHelper.cost} coins?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Unlock',
-          onPress: async () => {
-            setLoading(true);
-            const success = await unlockHelper(user.uid, selectedHelper.id, selectedHelper.cost);
-            if (success) {
-              Alert.alert('Success!', `${selectedHelper.name} has been unlocked!`);
-              await loadData();
-            } else {
-              Alert.alert('Error', 'Failed to unlock helper');
-            }
-            setLoading(false);
-          }
-        }
-      ]
-    );
-  };
-
-  const handleBuyEXP = async () => {
+  const handleBuyEXPForHelper = async () => {
     if (!selectedHelper) {
       Alert.alert('Error', 'Please select a helper first');
       return;
     }
 
-    const amount = parseInt(coinsToSpend);
-    if (isNaN(amount) || amount < COINS_PER_EXP) {
-      Alert.alert('Error', `Minimum ${COINS_PER_EXP} coins required`);
+    const expAmount = parseInt(expToBuy);
+    if (isNaN(expAmount) || expAmount < 1) {
+      Alert.alert('Error', 'Please enter a valid EXP amount (minimum 1)');
       return;
     }
 
-    if (amount > coins) {
-      Alert.alert('Not Enough Coins', `You only have ${coins} coins`);
+    const coinsCost = expAmount * COINS_PER_EXP;
+    if (coinsCost > coins) {
+      Alert.alert('Not Enough Coins', `You need ${coinsCost} coins but only have ${coins} coins`);
       return;
     }
 
-    const helperData = userHelpers[selectedHelper.id];
-    if (helperData?.level >= MAX_HELPER_LEVEL) {
-      Alert.alert('Max Level', 'This helper is already at max level!');
-      return;
-    }
-
-    const expGained = Math.floor(amount / COINS_PER_EXP);
     Alert.alert(
       'Buy EXP',
-      `Spend ${amount} coins to gain ${expGained} EXP for ${selectedHelper.name}?`,
+      `Buy ${expAmount} EXP for ${coinsCost} coins for ${selectedHelper.name}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Confirm',
           onPress: async () => {
             setLoading(true);
-            const result = await buyHelperEXP(user.uid, selectedHelper.id, amount);
-            if (result.success) {
-              if (result.leveledUp) {
-                Alert.alert(
-                  'Level Up! 🎉',
-                  `${selectedHelper.name} leveled up to Level ${result.newLevel}!`
-                );
+            try {
+              // First, deduct coins from user's balance
+              const purchaseResult = await buyEXPWithCoins(user.uid, coinsCost);
+              if (purchaseResult.success) {
+                // Then add EXP to the specific helper
+                const success = await addEXPToHelper(user.uid, selectedHelper.id, expAmount);
+                if (success) {
+                  Alert.alert('Success! 🎉', `Bought ${expAmount} EXP for ${coinsCost} coins!\n\n${selectedHelper.name} now has more EXP to upgrade ratings.`);
+                  setExpToBuy('');
+                  await loadData();
+                } else {
+                  Alert.alert('Error', 'Failed to add EXP to helper');
+                }
               } else {
-                Alert.alert('Success', `Added ${result.expGained} EXP to ${selectedHelper.name}`);
+                Alert.alert('Error', 'Failed to purchase EXP. Please try again.');
               }
-              setCoinsToSpend('');
+            } catch (error) {
+              console.error('Error buying EXP:', error);
+              Alert.alert('Error', 'An error occurred. Please try again.');
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleIncrementUpgrade = (subject) => {
+    const helperData = userHelpers[selectedHelper.id];
+    const helperDef = getHelperById(selectedHelper.id);
+    const currentRating = getHelperRating(helperData, helperDef, subject);
+    const plannedCount = plannedUpgrades[subject] || 0;
+    const potentialCap = helperDef.ratings[subject].potential;
+
+    // Check if can upgrade more
+    if (currentRating + plannedCount >= potentialCap) {
+      Alert.alert('Maxed', `${subject} is already at or will reach maximum potential!`);
+      return;
+    }
+
+    setPlannedUpgrades(prev => ({
+      ...prev,
+      [subject]: (prev[subject] || 0) + 1
+    }));
+  };
+
+  const handleDecrementUpgrade = (subject) => {
+    const currentPlanned = plannedUpgrades[subject] || 0;
+    if (currentPlanned > 0) {
+      setPlannedUpgrades(prev => ({
+        ...prev,
+        [subject]: prev[subject] - 1
+      }));
+    }
+  };
+
+  const calculateTotalCost = () => {
+    if (!selectedHelper) return 0;
+
+    const helperData = userHelpers[selectedHelper.id];
+    const helperDef = getHelperById(selectedHelper.id);
+    let totalCost = 0;
+
+    Object.keys(plannedUpgrades).forEach(subject => {
+      const upgradeCount = plannedUpgrades[subject];
+      if (upgradeCount > 0) {
+        let currentRating = getHelperRating(helperData, helperDef, subject);
+
+        // Calculate cost for each upgrade in sequence
+        for (let i = 0; i < upgradeCount; i++) {
+          totalCost += getRatingUpgradeCost(currentRating);
+          currentRating++;
+        }
+      }
+    });
+
+    return totalCost;
+  };
+
+  const handlePurchaseUpgrades = async () => {
+    if (!selectedHelper) return;
+
+    const totalUpgrades = Object.values(plannedUpgrades).reduce((sum, count) => sum + count, 0);
+    if (totalUpgrades === 0) {
+      Alert.alert('No Upgrades', 'Use +/- buttons to plan your upgrades first!');
+      return;
+    }
+
+    const helperData = userHelpers[selectedHelper.id];
+    const currentExp = helperData?.exp || 0;
+    const totalCost = calculateTotalCost();
+
+    if (currentExp < totalCost) {
+      Alert.alert(
+        'Not Enough EXP',
+        `You need ${totalCost} EXP but only have ${currentExp} EXP.\n\nBuy more EXP with coins above!`
+      );
+      return;
+    }
+
+    // Build summary
+    const upgradesList = Object.keys(plannedUpgrades)
+      .filter(subject => plannedUpgrades[subject] > 0)
+      .map(subject => `• ${subject}: +${plannedUpgrades[subject]}`)
+      .join('\n');
+
+    Alert.alert(
+      'Confirm Purchase',
+      `Apply these upgrades?\n\n${upgradesList}\n\nTotal Cost: ${totalCost} EXP\nRemaining: ${currentExp - totalCost} EXP\n\n⚠️ Cannot be undone!`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Purchase',
+          onPress: async () => {
+            setLoading(true);
+            try {
+              const helperDef = getHelperById(selectedHelper.id);
+              const newRatings = { ...helperData.ratings };
+              let expSpent = 0;
+
+              // Apply all upgrades
+              Object.keys(plannedUpgrades).forEach(subject => {
+                const upgradeCount = plannedUpgrades[subject];
+                if (upgradeCount > 0) {
+                  let currentRating = getHelperRating(helperData, helperDef, subject);
+
+                  for (let i = 0; i < upgradeCount; i++) {
+                    expSpent += getRatingUpgradeCost(currentRating);
+                    currentRating++;
+                  }
+
+                  newRatings[subject] = currentRating;
+                }
+              });
+
+              // Update Firebase
+              const userDocRef = doc(firestore, COLLECTIONS.USERS, user.uid);
+              await updateDoc(userDocRef, {
+                [`helpers.${selectedHelper.id}.ratings`]: newRatings,
+                [`helpers.${selectedHelper.id}.exp`]: currentExp - expSpent
+              });
+
+              Alert.alert('Success! 🎉', `Upgrades applied!\n\nEXP Spent: ${expSpent}\nEXP Remaining: ${currentExp - expSpent}`);
+              setPlannedUpgrades({});
               await loadData();
-            } else {
-              Alert.alert('Error', 'Failed to buy EXP');
+            } catch (error) {
+              console.error('Error applying upgrades:', error);
+              Alert.alert('Error', 'Failed to apply upgrades');
             }
             setLoading(false);
           }
@@ -151,9 +268,9 @@ const HelperUpgradeScreen = ({ navigation }) => {
   };
 
   const getRatingColor = (rating) => {
-    if (rating >= 80) return '#4aca4a';
-    if (rating >= 60) return '#caca4a';
-    if (rating >= 40) return '#ca8a4a';
+    if (rating >= 85) return '#4aca4a';
+    if (rating >= 70) return '#caca4a';
+    if (rating >= 50) return '#ca8a4a';
     return '#ca4a4a';
   };
 
@@ -168,14 +285,41 @@ const HelperUpgradeScreen = ({ navigation }) => {
     }
   };
 
-  // Show ALL helpers (both locked and unlocked)
-  const allHelpers = helpers;
+  // Filter to show only UNLOCKED helpers
+  const unlockedHelpers = helpers.filter(h => userHelpers[h.id]?.unlocked);
 
   if (loading) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
         <ActivityIndicator size="large" color="#faca3a" />
         <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+
+  if (unlockedHelpers.length === 0) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Text style={styles.backButton}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>View Helpers</Text>
+          <Text style={styles.coinsDisplay}>🪙 {coins}</Text>
+        </View>
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyIcon}>🔒</Text>
+          <Text style={styles.emptyTitle}>No Helpers Unlocked</Text>
+          <Text style={styles.emptyText}>
+            Visit the Shop to unlock your first helpers!
+          </Text>
+          <TouchableOpacity
+            style={styles.shopButton}
+            onPress={() => navigation.navigate('Shop')}
+          >
+            <Text style={styles.shopButtonText}>Go to Shop</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -194,34 +338,28 @@ const HelperUpgradeScreen = ({ navigation }) => {
       <ScrollView style={styles.content}>
         {/* Info Box */}
         <View style={styles.infoBox}>
-          <Text style={styles.infoTitle}>💡 Helper System</Text>
+          <Text style={styles.infoTitle}>💡 NBA 2K-Style Upgrade System</Text>
           <Text style={styles.infoText}>
-            • Unlock helpers with coins{'\n'}
-            • Spend coins to gain EXP ({COINS_PER_EXP} coins = 1 EXP){'\n'}
-            • Level up to unlock better ratings{'\n'}
-            • Earn EXP by playing quizzes with your helpers!
+            • Use +/- to plan upgrades across subjects{'\n'}
+            • Click "Purchase All" to apply changes{'\n'}
+            • ⚠️ Cannot refund EXP after purchase{'\n'}
+            • Buy EXP with coins (10 coins = 1 EXP)
           </Text>
         </View>
 
         {/* Helper Selection */}
-        <Text style={styles.sectionTitle}>All Helpers</Text>
-        <View style={styles.helperGrid}>
-          {allHelpers.map(helper => {
+        <Text style={styles.sectionTitle}>Select Helper</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.helperScroll}>
+          {unlockedHelpers.map(helper => {
             const helperData = userHelpers[helper.id];
-            const isUnlocked = helperData?.unlocked || false;
             const isSelected = selectedHelper?.id === helper.id;
-            const level = helperData?.level || 1;
-            const exp = helperData?.exp || 0;
-            const expNeeded = getExpForNextLevel(level);
-            const isMaxLevel = level >= MAX_HELPER_LEVEL;
 
             return (
               <TouchableOpacity
                 key={helper.id}
                 style={[
                   styles.helperCard,
-                  isSelected && styles.helperCardSelected,
-                  !isUnlocked && styles.helperCardLocked
+                  isSelected && styles.helperCardSelected
                 ]}
                 onPress={() => setSelectedHelper(helper)}
               >
@@ -229,148 +367,142 @@ const HelperUpgradeScreen = ({ navigation }) => {
                   <Text style={styles.tierText}>{helper.tier}</Text>
                 </View>
 
-                {!isUnlocked && (
-                  <View style={styles.lockOverlay}>
-                    <Text style={styles.lockIcon}>🔒</Text>
-                    <Text style={styles.unlockCost}>{helper.cost} 🪙</Text>
-                  </View>
-                )}
-
-                <Text style={[styles.helperIcon, !isUnlocked && styles.lockedIcon]}>
-                  {helper.icon}
-                </Text>
+                <Image source={helper.image} style={styles.helperImage} />
                 <Text style={styles.helperName}>{helper.name}</Text>
-
-                {isUnlocked ? (
-                  <>
-                    <Text style={styles.helperLevel}>Level {level}</Text>
-                    {!isMaxLevel ? (
-                      <View style={styles.expBarContainer}>
-                        <View style={styles.expBar}>
-                          <View
-                            style={[
-                              styles.expBarFill,
-                              { width: `${(exp / expNeeded) * 100}%` }
-                            ]}
-                          />
-                        </View>
-                        <Text style={styles.expText}>
-                          {exp}/{expNeeded} EXP
-                        </Text>
-                      </View>
-                    ) : (
-                      <Text style={styles.maxLevelText}>MAX LEVEL</Text>
-                    )}
-                  </>
-                ) : (
-                  <Text style={styles.lockedText}>LOCKED</Text>
-                )}
+                <Text style={styles.helperEXP}>{helperData?.exp || 0} EXP</Text>
               </TouchableOpacity>
             );
           })}
-        </View>
+        </ScrollView>
 
         {/* Upgrade Section */}
         {selectedHelper && (
           <View style={styles.upgradeSection}>
-            <Text style={styles.sectionTitle}>
-              {userHelpers[selectedHelper.id]?.unlocked ? 'Upgrade' : 'Unlock'} {selectedHelper.name}
-            </Text>
-
-            {/* Unlock Button for Locked Helpers */}
-            {!userHelpers[selectedHelper.id]?.unlocked && (
-              <View style={styles.unlockSection}>
-                <Text style={styles.unlockText}>
-                  This helper is currently locked. Unlock to use in quizzes and start leveling up!
-                </Text>
-                <TouchableOpacity
-                  style={styles.unlockButton}
-                  onPress={handleUnlockHelper}
-                  disabled={loading}
-                >
-                  <Text style={styles.unlockButtonText}>
-                    🔓 Unlock for {selectedHelper.cost} 🪙
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Current Stats */}
-            <View style={styles.statsBox}>
-              <Text style={styles.statsTitle}>Current Ratings (Level {userHelpers[selectedHelper.id]?.level || 1})</Text>
-              <ScrollView style={styles.ratingsList}>
-                {subjects.map(subject => {
-                  const currentLevel = userHelpers[selectedHelper.id]?.level || 1;
-                  const currentRating = calculateHelperRating(selectedHelper, currentLevel, subject.key);
-                  const maxRating = selectedHelper.ratings[subject.key]?.potential || currentRating;
-
-                  return (
-                    <View key={subject.key} style={styles.ratingRow}>
-                      <Text style={styles.subjectIcon}>{subject.icon}</Text>
-                      <Text style={styles.subjectName}>{subject.key}</Text>
-                      <View style={styles.ratingBar}>
-                        <View
-                          style={[
-                            styles.ratingFill,
-                            {
-                              width: `${currentRating}%`,
-                              backgroundColor: getRatingColor(currentRating)
-                            }
-                          ]}
-                        />
-                      </View>
-                      <Text style={[styles.ratingValue, { color: getRatingColor(currentRating) }]}>
-                        {currentRating}
-                        {currentLevel < MAX_HELPER_LEVEL && (
-                          <Text style={styles.potentialRating}> → {maxRating}</Text>
-                        )}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </ScrollView>
+            <View style={styles.selectedHelperHeader}>
+              <Image source={selectedHelper.image} style={styles.selectedHelperImage} />
+              <Text style={styles.selectedHelperTitle}>{selectedHelper.name}</Text>
             </View>
 
-            {/* Buy EXP - Only show for unlocked helpers */}
-            {userHelpers[selectedHelper.id]?.unlocked && userHelpers[selectedHelper.id]?.level < MAX_HELPER_LEVEL && (
-              <View style={styles.buyBox}>
-                <Text style={styles.buyTitle}>Buy EXP with Coins</Text>
-                <Text style={styles.buySubtitle}>{COINS_PER_EXP} coins = 1 EXP</Text>
-
-                <View style={styles.inputRow}>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter coins to spend"
-                    placeholderTextColor="#888"
-                    keyboardType="numeric"
-                    value={coinsToSpend}
-                    onChangeText={setCoinsToSpend}
-                  />
-                  <TouchableOpacity
-                    style={styles.maxButton}
-                    onPress={() => setCoinsToSpend(coins.toString())}
-                  >
-                    <Text style={styles.maxButtonText}>MAX</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {coinsToSpend && !isNaN(parseInt(coinsToSpend)) && parseInt(coinsToSpend) >= COINS_PER_EXP && (
-                  <Text style={styles.expPreview}>
-                    Will gain {Math.floor(parseInt(coinsToSpend) / COINS_PER_EXP)} EXP
-                  </Text>
-                )}
-
+            {/* Buy EXP Section */}
+            <View style={styles.buyEXPSection}>
+              <Text style={styles.sectionTitle}>Buy EXP with Coins</Text>
+              <Text style={styles.buyEXPInfo}>
+                Current EXP: {userHelpers[selectedHelper.id]?.exp || 0} ⚡
+              </Text>
+              <View style={styles.buyEXPRow}>
+                <TextInput
+                  style={styles.coinsInput}
+                  placeholder="EXP to buy"
+                  placeholderTextColor="#666"
+                  keyboardType="numeric"
+                  value={expToBuy}
+                  onChangeText={setExpToBuy}
+                />
                 <TouchableOpacity
                   style={styles.buyButton}
-                  onPress={handleBuyEXP}
+                  onPress={handleBuyEXPForHelper}
                   disabled={loading}
                 >
-                  <Text style={styles.buyButtonText}>
-                    {loading ? 'Processing...' : 'Buy EXP'}
-                  </Text>
+                  <Text style={styles.buyButtonText}>Buy EXP</Text>
                 </TouchableOpacity>
               </View>
-            )}
+              <Text style={styles.conversionText}>
+                {expToBuy ? `Costs: ${parseInt(expToBuy) * COINS_PER_EXP} coins` : '1 EXP = 10 coins'}
+              </Text>
+            </View>
+
+            {/* Subject Ratings - NBA 2K Style with +/- */}
+            <Text style={styles.sectionTitle}>Plan Rating Upgrades</Text>
+            {subjects.map(({ key, icon }) => {
+              const helperDef = getHelperById(selectedHelper.id);
+              const helperData = userHelpers[selectedHelper.id];
+              const currentRating = getHelperRating(helperData, helperDef, key);
+              const potentialCap = helperDef.ratings[key].potential;
+              const plannedCount = plannedUpgrades[key] || 0;
+              const newRating = currentRating + plannedCount;
+              const isMaxed = newRating >= potentialCap;
+
+              return (
+                <View key={key} style={styles.ratingRow}>
+                  <View style={styles.ratingInfo}>
+                    <Text style={styles.subjectIcon}>{icon}</Text>
+                    <View style={styles.subjectTextContainer}>
+                      <Text style={styles.subjectName}>{key}</Text>
+                      <Text style={styles.ratingText}>
+                        <Text style={{ color: getRatingColor(currentRating), fontWeight: 'bold' }}>
+                          {currentRating}
+                        </Text>
+                        {plannedCount > 0 && (
+                          <Text style={{ color: '#faca3a', fontWeight: 'bold' }}>
+                            {' '}→ {newRating}
+                          </Text>
+                        )}
+                        <Text style={{ color: '#666' }}> / {potentialCap}</Text>
+                      </Text>
+                    </View>
+                  </View>
+
+                  {!isMaxed ? (
+                    <View style={styles.upgradeControls}>
+                      <TouchableOpacity
+                        style={[styles.controlButton, plannedCount === 0 && styles.controlButtonDisabled]}
+                        onPress={() => handleDecrementUpgrade(key)}
+                        disabled={plannedCount === 0}
+                      >
+                        <Text style={styles.controlButtonText}>−</Text>
+                      </TouchableOpacity>
+
+                      <View style={styles.upgradeCount}>
+                        <Text style={styles.upgradeCountText}>
+                          {plannedCount > 0 ? `+${plannedCount}` : '0'}
+                        </Text>
+                      </View>
+
+                      <TouchableOpacity
+                        style={styles.controlButton}
+                        onPress={() => handleIncrementUpgrade(key)}
+                      >
+                        <Text style={styles.controlButtonText}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={styles.maxedBadge}>
+                      <Text style={styles.maxedText}>MAX</Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+
+            {/* Purchase Button */}
+            <View style={styles.purchaseSection}>
+              <View style={styles.costSummary}>
+                <Text style={styles.costLabel}>Total Cost:</Text>
+                <Text style={styles.costValue}>{calculateTotalCost()} EXP</Text>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.purchaseButton,
+                  calculateTotalCost() === 0 && styles.purchaseButtonDisabled
+                ]}
+                onPress={handlePurchaseUpgrades}
+                disabled={loading || calculateTotalCost() === 0}
+              >
+                <Text style={styles.purchaseButtonText}>Purchase All Upgrades</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Cost Info */}
+            <View style={styles.costInfoBox}>
+              <Text style={styles.costInfoTitle}>Upgrade Costs (EXP per +1)</Text>
+              <Text style={styles.costInfoText}>
+                25-49: 5 EXP{'\n'}
+                50-69: 10 EXP{'\n'}
+                70-84: 20 EXP{'\n'}
+                85-94: 50 EXP{'\n'}
+                95-99: 100 EXP
+              </Text>
+            </View>
           </View>
         )}
       </ScrollView>
@@ -381,315 +513,343 @@ const HelperUpgradeScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#2a3a4a',
+    backgroundColor: '#1a1a2e',
   },
   loadingContainer: {
     justifyContent: 'center',
     alignItems: 'center',
   },
   loadingText: {
-    color: '#faca3a',
-    fontSize: 16,
+    color: '#fff',
     marginTop: 10,
+    fontSize: 16,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 30,
+  },
+  emptyIcon: {
+    fontSize: 80,
+    marginBottom: 20,
+  },
+  emptyTitle: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  emptyText: {
+    color: '#aaa',
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 30,
+  },
+  shopButton: {
+    backgroundColor: '#faca3a',
+    paddingHorizontal: 30,
+    paddingVertical: 15,
+    borderRadius: 10,
+  },
+  shopButtonText: {
+    color: '#1a1a2e',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 20,
-    paddingTop: 40,
-    backgroundColor: '#1a2a3a',
+    alignItems: 'center',
+    padding: 15,
+    backgroundColor: '#16213e',
     borderBottomWidth: 2,
     borderBottomColor: '#faca3a',
   },
   backButton: {
     color: '#faca3a',
     fontSize: 16,
-    fontWeight: 'bold',
   },
   title: {
-    color: '#faca3a',
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
+    color: '#fff',
   },
   coinsDisplay: {
+    fontSize: 16,
     color: '#faca3a',
-    fontSize: 18,
     fontWeight: 'bold',
   },
   content: {
     flex: 1,
-    padding: 20,
+    padding: 15,
   },
   infoBox: {
-    backgroundColor: 'rgba(74, 202, 74, 0.1)',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 20,
+    backgroundColor: '#16213e',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 15,
     borderWidth: 1,
-    borderColor: '#4aca4a',
+    borderColor: '#faca3a',
   },
   infoTitle: {
-    color: '#4aca4a',
-    fontSize: 16,
+    color: '#faca3a',
+    fontSize: 14,
     fontWeight: 'bold',
-    marginBottom: 8,
+    marginBottom: 5,
   },
   infoText: {
-    color: '#ccc',
-    fontSize: 13,
-    lineHeight: 20,
+    color: '#aaa',
+    fontSize: 12,
+    lineHeight: 18,
   },
   sectionTitle: {
-    color: '#faca3a',
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 15,
-    marginTop: 10,
+    color: '#fff',
+    marginTop: 15,
+    marginBottom: 10,
   },
-  helperGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 20,
+  helperScroll: {
+    marginBottom: 15,
   },
   helperCard: {
-    width: '48%',
-    backgroundColor: 'rgba(90, 106, 122, 0.5)',
-    borderRadius: 12,
-    padding: 15,
+    width: 100,
+    height: 130,
+    backgroundColor: '#16213e',
+    borderRadius: 10,
+    padding: 8,
+    marginRight: 10,
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#5a6a7a',
-    position: 'relative',
+    borderColor: '#333',
   },
   helperCardSelected: {
     borderColor: '#faca3a',
-    backgroundColor: 'rgba(250, 202, 58, 0.1)',
-  },
-  helperCardLocked: {
-    opacity: 0.7,
-  },
-  lockOverlay: {
-    position: 'absolute',
-    top: 50,
-    right: 10,
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  lockIcon: {
-    fontSize: 24,
-    marginBottom: 2,
-  },
-  unlockCost: {
-    color: '#faca3a',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  lockedIcon: {
-    opacity: 0.3,
-  },
-  lockedText: {
-    color: '#ca4a4a',
-    fontSize: 11,
-    fontWeight: 'bold',
+    backgroundColor: '#1f2b4e',
   },
   tierBadge: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
+    top: 5,
+    right: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   tierText: {
     color: '#fff',
     fontSize: 8,
     fontWeight: 'bold',
   },
-  helperIcon: {
-    fontSize: 48,
-    marginBottom: 8,
+  helperImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    marginBottom: 5,
+    alignSelf: 'center',
   },
   helperName: {
     color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  helperLevel: {
-    color: '#faca3a',
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  expBarContainer: {
-    width: '100%',
-  },
-  expBar: {
-    width: '100%',
-    height: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginBottom: 4,
-  },
-  expBarFill: {
-    height: '100%',
-    backgroundColor: '#4aca4a',
-  },
-  expText: {
-    color: '#ccc',
-    fontSize: 10,
-    textAlign: 'center',
-  },
-  maxLevelText: {
-    color: '#faca3a',
     fontSize: 11,
     fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  helperEXP: {
+    color: '#faca3a',
+    fontSize: 10,
+    marginTop: 2,
   },
   upgradeSection: {
-    marginTop: 20,
+    marginTop: 10,
   },
-  unlockSection: {
-    backgroundColor: 'rgba(250, 202, 58, 0.1)',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#faca3a',
-  },
-  unlockText: {
-    color: '#ccc',
-    fontSize: 14,
+  selectedHelperHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 15,
-    textAlign: 'center',
+    gap: 10,
   },
-  unlockButton: {
-    backgroundColor: '#faca3a',
+  selectedHelperImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  selectedHelperTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  buyEXPSection: {
+    backgroundColor: '#16213e',
     padding: 15,
     borderRadius: 10,
-    alignItems: 'center',
-  },
-  unlockButtonText: {
-    color: '#1a2a3a',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  statsBox: {
-    backgroundColor: 'rgba(90, 106, 122, 0.3)',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 20,
-  },
-  statsTitle: {
-    color: '#faca3a',
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 12,
-  },
-  ratingsList: {
-    maxHeight: 300,
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  subjectIcon: {
-    fontSize: 14,
-    marginRight: 8,
-  },
-  subjectName: {
-    color: '#fff',
-    fontSize: 11,
-    flex: 1,
-  },
-  ratingBar: {
-    width: 60,
-    height: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    borderRadius: 5,
-    marginRight: 8,
-    overflow: 'hidden',
-  },
-  ratingFill: {
-    height: '100%',
-    borderRadius: 5,
-  },
-  ratingValue: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    width: 70,
-    textAlign: 'right',
-  },
-  potentialRating: {
-    fontSize: 9,
-    color: '#9aaa9a',
-    fontWeight: 'normal',
-  },
-  buyBox: {
-    backgroundColor: 'rgba(250, 202, 58, 0.1)',
-    borderRadius: 12,
-    padding: 15,
-    borderWidth: 1,
-    borderColor: '#faca3a',
-  },
-  buyTitle: {
-    color: '#faca3a',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  buySubtitle: {
-    color: '#ccc',
-    fontSize: 12,
     marginBottom: 15,
   },
-  inputRow: {
+  buyEXPInfo: {
+    color: '#faca3a',
+    fontSize: 14,
+    marginBottom: 10,
+  },
+  buyEXPRow: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 10,
   },
-  input: {
+  coinsInput: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    borderRadius: 8,
-    padding: 12,
+    backgroundColor: '#1a1a2e',
     color: '#fff',
-    fontSize: 16,
+    padding: 10,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#5a6a7a',
-  },
-  maxButton: {
-    backgroundColor: '#4a9aca',
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    justifyContent: 'center',
-  },
-  maxButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  expPreview: {
-    color: '#4aca4a',
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    textAlign: 'center',
+    borderColor: '#333',
   },
   buyButton: {
     backgroundColor: '#4aca4a',
-    padding: 15,
-    borderRadius: 10,
-    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    justifyContent: 'center',
   },
   buyButtonText: {
     color: '#fff',
+    fontWeight: 'bold',
+  },
+  conversionText: {
+    color: '#666',
+    fontSize: 12,
+    marginTop: 5,
+    textAlign: 'center',
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#16213e',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  ratingInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  subjectIcon: {
+    fontSize: 24,
+    marginRight: 10,
+  },
+  subjectTextContainer: {
+    flex: 1,
+  },
+  subjectName: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  ratingText: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  upgradeControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  controlButton: {
+    backgroundColor: '#faca3a',
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  controlButtonDisabled: {
+    backgroundColor: '#555',
+    opacity: 0.5,
+  },
+  controlButtonText: {
+    color: '#1a1a2e',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  upgradeCount: {
+    minWidth: 40,
+    alignItems: 'center',
+  },
+  upgradeCountText: {
+    color: '#faca3a',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  maxedBadge: {
+    backgroundColor: '#4aca4a',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  maxedText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  purchaseSection: {
+    backgroundColor: '#16213e',
+    padding: 15,
+    borderRadius: 10,
+    marginTop: 15,
+    borderWidth: 2,
+    borderColor: '#faca3a',
+  },
+  costSummary: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  costLabel: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  costValue: {
+    color: '#faca3a',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  purchaseButton: {
+    backgroundColor: '#4aca4a',
+    paddingVertical: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  purchaseButtonDisabled: {
+    backgroundColor: '#555',
+    opacity: 0.5,
+  },
+  purchaseButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  costInfoBox: {
+    backgroundColor: '#16213e',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 15,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  costInfoTitle: {
+    color: '#faca3a',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  costInfoText: {
+    color: '#aaa',
+    fontSize: 12,
+    lineHeight: 20,
   },
 });
 

@@ -14,7 +14,8 @@ import { getQuizQuestions } from '../services/questionService';
 import { calculateBonusPoints, getSubjectOfTheDay } from '../services/dailySubject';
 import { useAuth } from '../context/AuthContext';
 import { updateUserStats } from '../services/userStatsService';
-import { addHelperEXP } from '../services/helperService';
+import { addHelperEXP, getUserHelpers, getHelperRating } from '../services/helperService';
+import { getHelperById } from '../data/helpers';
 
 // Shuffle answers while maintaining correct answer tracking
 const shuffleAnswers = (question) => {
@@ -63,6 +64,7 @@ const QuizGameScreen = ({ route, navigation }) => {
   const [fadeAnim] = useState(new Animated.Value(1));
   const [dailySubject] = useState(getSubjectOfTheDay());
   const [questionStartTime, setQuestionStartTime] = useState(Date.now());
+  const [userHelpers, setUserHelpers] = useState({});
 
   // Calculate time bonus based on streak
   const getTimeBonus = (currentStreak) => {
@@ -81,7 +83,7 @@ const QuizGameScreen = ({ route, navigation }) => {
     return 0;
   };
 
-  // Load questions from Firestore
+  // Load questions and user helpers from Firestore
   useEffect(() => {
     const loadQuestions = async () => {
       try {
@@ -89,6 +91,12 @@ const QuizGameScreen = ({ route, navigation }) => {
         const fetchedQuestions = await getQuizQuestions();
         const shuffled = fetchedQuestions.map(q => shuffleAnswers(q));
         setQuestions(shuffled);
+
+        // Load user's helper data
+        if (user) {
+          const helpersData = await getUserHelpers(user.uid);
+          setUserHelpers(helpersData);
+        }
       } catch (error) {
         console.error('Error loading questions:', error);
         Alert.alert('Error', 'Failed to load questions. Please try again.');
@@ -336,15 +344,19 @@ const QuizGameScreen = ({ route, navigation }) => {
 
   const useHelper = (helper) => {
     if (helperUsed || isAnswered) return;
-    
+
     setHelperUsed(true);
-    const subject = question.subject.toLowerCase();
-    const accuracy = helper[subject] || 50;
-    
+
+    // Get helper's rating for this subject using the new rating system
+    const helperDef = getHelperById(helper.id);
+    const userHelper = userHelpers[helper.id];
+    const subject = question.subject;
+    const rating = getHelperRating(userHelper, helperDef, subject);
+
     setHelperSuggestion({
       answer: question.correct,
       helper: helper.name,
-      confidence: accuracy
+      confidence: rating
     });
   };
 
