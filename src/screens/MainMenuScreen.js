@@ -72,8 +72,13 @@ const MainMenuScreen = ({ navigation }) => {
   }, [user]);
 
   const loadLeaderboard = async () => {
-    const topPlayers = await getTopLeaderboard(10);
-    setLeaderboard(topPlayers);
+    try {
+      const topPlayers = await getTopLeaderboard(10);
+      setLeaderboard(topPlayers);
+    } catch (error) {
+      console.error('Error loading leaderboard:', error);
+      setLeaderboard([]); // Set empty array on error to prevent crashes
+    }
   };
 
   const loadTopSubjects = async () => {
@@ -389,6 +394,13 @@ const MainMenuScreen = ({ navigation }) => {
               onPress={handleWatchAd}
             >
               <Text style={styles.adButtonText}>📺 WATCH AD FOR REWARDS</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.secondaryButton}
+              onPress={() => navigation.navigate('HelperUpgrade')}
+            >
+              <Text style={styles.secondaryButtonText}>👥 VIEW HELPERS</Text>
             </Pressable>
 
             <Pressable

@@ -16,6 +16,7 @@ import LoginScreen from './src/screens/LoginScreen';
 import SignupScreen from './src/screens/SignupScreen';
 import MainMenuScreen from './src/screens/MainMenuScreen';
 import HelperSelectScreen from './src/screens/HelperSelectScreen';
+import HelperUpgradeScreen from './src/screens/HelperUpgradeScreen';
 import QuizGameScreen from './src/screens/QuizGameScreen';
 import ResultsScreen from './src/screens/ResultsScreen';
 import QuestionManagerScreen from './src/screens/QuestionManagerScreen';
@@ -47,6 +48,7 @@ function AppNavigator() {
           <>
             <Stack.Screen name="MainMenu" component={MainMenuScreen} />
             <Stack.Screen name="HelperSelect" component={HelperSelectScreen} />
+            <Stack.Screen name="HelperUpgrade" component={HelperUpgradeScreen} />
             <Stack.Screen name="QuizGame" component={QuizGameScreen} />
             <Stack.Screen name="Results" component={ResultsScreen} />
             <Stack.Screen name="QuestionManager" component={QuestionManagerScreen} />

@@ -78,6 +78,12 @@ const SignupScreen = ({ navigation }) => {
         energy: 25, // Starting energy (full)
         lastEnergyUpdate: serverTimestamp(),
         isAdmin: false,
+        helpers: {
+          // Start with 3 FREE helpers unlocked
+          'max_chen': { unlocked: true, level: 1, exp: 0 },
+          'coach_rivera': { unlocked: true, level: 1, exp: 0 },
+          'luna_page': { unlocked: true, level: 1, exp: 0 }
+        }
       });
 
       // Create initial leaderboard entry

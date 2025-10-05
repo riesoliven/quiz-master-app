@@ -8,18 +8,42 @@ import {
   Alert,
   Dimensions,
   FlatList,
-  BackHandler
+  BackHandler,
+  ActivityIndicator
 } from 'react-native';
-import { helpers } from '../data/questions';
+import { helpers } from '../data/helpers';
+import { useAuth } from '../context/AuthContext';
+import { getUserHelpers, unlockHelper, calculateHelperRating, HELPER_COSTS } from '../services/helperService';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.75;
 const CARD_SPACING = (width - CARD_WIDTH) / 2;
 
 const HelperSelectScreen = ({ navigation }) => {
+  const { user, userProfile } = useAuth();
   const [selectedHelpers, setSelectedHelpers] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [userHelpers, setUserHelpers] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [coins, setCoins] = useState(0);
   const flatListRef = useRef(null);
+
+  useEffect(() => {
+    loadUserHelpers();
+  }, []);
+
+  const loadUserHelpers = async () => {
+    if (!user) return;
+    try {
+      const helpers = await getUserHelpers(user.uid);
+      setUserHelpers(helpers);
+      setCoins(userProfile?.coins || 0);
+    } catch (error) {
+      console.error('Error loading helpers:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const subjects = [
     { key: 'Arithmetic & Algebra', icon: '📐' },
@@ -36,11 +60,51 @@ const HelperSelectScreen = ({ navigation }) => {
     { key: 'Technology', icon: '💻' }
   ];
 
+  const isHelperUnlocked = (helperId) => {
+    return userHelpers[helperId]?.unlocked || false;
+  };
+
+  const getHelperLevel = (helperId) => {
+    return userHelpers[helperId]?.level || 1;
+  };
+
   const isHelperSelected = (helper) => {
     return selectedHelpers.find(h => h.id === helper.id);
   };
 
+  const handleUnlockHelper = async (helper) => {
+    if (coins < helper.cost) {
+      Alert.alert('Not Enough Coins', `You need ${helper.cost} coins to unlock ${helper.name}. You have ${coins} coins.`);
+      return;
+    }
+
+    Alert.alert(
+      'Unlock Helper',
+      `Unlock ${helper.name} for ${helper.cost} coins?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Unlock',
+          onPress: async () => {
+            const success = await unlockHelper(user.uid, helper.id, helper.cost);
+            if (success) {
+              Alert.alert('Success!', `${helper.name} has been unlocked!`);
+              await loadUserHelpers();
+            } else {
+              Alert.alert('Error', 'Failed to unlock helper');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const toggleHelper = (helper) => {
+    if (!isHelperUnlocked(helper.id)) {
+      handleUnlockHelper(helper);
+      return;
+    }
+
     if (isHelperSelected(helper)) {
       setSelectedHelpers(selectedHelpers.filter(h => h.id !== helper.id));
     } else {
@@ -67,32 +131,66 @@ const HelperSelectScreen = ({ navigation }) => {
     return '#ca4a4a';
   };
 
+  const getTierColor = (tier) => {
+    switch (tier) {
+      case 'FREE': return '#888';
+      case 'COMMON': return '#4aca4a';
+      case 'RARE': return '#4a9aca';
+      case 'EPIC': return '#ca4aca';
+      case 'LEGENDARY': return '#faca3a';
+      default: return '#888';
+    }
+  };
+
   const renderHelper = ({ item: helper, index }) => {
     const selected = isHelperSelected(helper);
+    const unlocked = isHelperUnlocked(helper.id);
+    const level = getHelperLevel(helper.id);
 
     return (
       <View style={styles.cardContainer}>
-        <View style={[styles.card, selected && styles.cardSelected]}>
+        <View style={[
+          styles.card,
+          selected && styles.cardSelected,
+          !unlocked && styles.cardLocked
+        ]}>
+          {/* Tier Badge */}
+          <View style={[styles.tierBadge, { backgroundColor: getTierColor(helper.tier) }]}>
+            <Text style={styles.tierText}>{helper.tier}</Text>
+          </View>
+
           {/* Helper Icon/Avatar */}
           <View style={styles.helperIconContainer}>
-            <Text style={styles.helperIcon}>{helper.icon}</Text>
-            {selected && (
+            <Text style={[styles.helperIcon, !unlocked && styles.lockedIcon]}>{helper.icon}</Text>
+            {selected && unlocked && (
               <View style={styles.selectedBadge}>
                 <Text style={styles.selectedBadgeText}>✓</Text>
+              </View>
+            )}
+            {!unlocked && (
+              <View style={styles.lockBadge}>
+                <Text style={styles.lockIcon}>🔒</Text>
               </View>
             )}
           </View>
 
           {/* Helper Name */}
           <Text style={styles.helperName}>{helper.name}</Text>
+          {unlocked && <Text style={styles.helperLevel}>Level {level}</Text>}
+          <Text style={styles.helperDescription}>{helper.description}</Text>
 
-          {/* Add/Remove Button */}
+          {/* Add/Remove/Unlock Button */}
           <TouchableOpacity
-            style={[styles.actionButton, selected && styles.removeButton]}
+            style={[
+              styles.actionButton,
+              selected && styles.removeButton,
+              !unlocked && styles.unlockButton
+            ]}
             onPress={() => toggleHelper(helper)}
           >
             <Text style={styles.actionButtonText}>
-              {selected ? '✕ Remove from Team' : '+ Add to Team'}
+              {!unlocked ? `🔓 Unlock (${helper.cost} 🪙)` :
+               selected ? '✕ Remove from Team' : '+ Add to Team'}
             </Text>
           </TouchableOpacity>
 
@@ -100,31 +198,42 @@ const HelperSelectScreen = ({ navigation }) => {
           <View style={styles.ratingsContainer}>
             <Text style={styles.ratingsHeader}>Subject Expertise</Text>
             <ScrollView style={styles.ratingsList} showsVerticalScrollIndicator={false}>
-              {subjects.map(subject => (
-                <View key={subject.key} style={styles.ratingRow}>
-                  <Text style={styles.subjectIcon}>{subject.icon}</Text>
-                  <Text style={styles.subjectName}>{subject.key}</Text>
-                  <View style={styles.ratingBar}>
-                    <View
+              {subjects.map(subject => {
+                const currentRating = unlocked
+                  ? calculateHelperRating(helper, level, subject.key)
+                  : helper.ratings[subject.key]?.base || 0;
+                const potentialRating = helper.ratings[subject.key]?.potential || currentRating;
+
+                return (
+                  <View key={subject.key} style={styles.ratingRow}>
+                    <Text style={styles.subjectIcon}>{subject.icon}</Text>
+                    <Text style={styles.subjectName}>{subject.key}</Text>
+                    <View style={styles.ratingBar}>
+                      <View
+                        style={[
+                          styles.ratingFill,
+                          {
+                            width: `${currentRating}%`,
+                            backgroundColor: getRatingColor(currentRating),
+                            opacity: unlocked ? 1 : 0.5
+                          }
+                        ]}
+                      />
+                    </View>
+                    <Text
                       style={[
-                        styles.ratingFill,
-                        {
-                          width: `${helper[subject.key]}%`,
-                          backgroundColor: getRatingColor(helper[subject.key])
-                        }
+                        styles.ratingValue,
+                        { color: getRatingColor(currentRating) }
                       ]}
-                    />
+                    >
+                      {currentRating}
+                      {unlocked && level < 10 && (
+                        <Text style={styles.potentialRating}>→{potentialRating}</Text>
+                      )}
+                    </Text>
                   </View>
-                  <Text
-                    style={[
-                      styles.ratingValue,
-                      { color: getRatingColor(helper[subject.key]) }
-                    ]}
-                  >
-                    {helper[subject.key]}
-                  </Text>
-                </View>
-              ))}
+                );
+              })}
             </ScrollView>
           </View>
         </View>
@@ -157,6 +266,15 @@ const HelperSelectScreen = ({ navigation }) => {
     return () => backHandler.remove();
   }, [navigation]);
 
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color="#faca3a" />
+        <Text style={styles.loadingText}>Loading helpers...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -164,7 +282,10 @@ const HelperSelectScreen = ({ navigation }) => {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.backButton}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Choose Your Team</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.title}>Choose Your Team</Text>
+          <Text style={styles.coinsDisplay}>🪙 {coins}</Text>
+        </View>
       </View>
 
       {/* Selected Team Slots */}
@@ -246,6 +367,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#3a4a5a',
   },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#faca3a',
+    fontSize: 16,
+    marginTop: 10,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -258,9 +388,20 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginRight: 15,
   },
+  headerCenter: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   title: {
     color: 'white',
     fontSize: 24,
+    fontWeight: 'bold',
+  },
+  coinsDisplay: {
+    color: '#faca3a',
+    fontSize: 18,
     fontWeight: 'bold',
   },
   slotsContainer: {
@@ -328,10 +469,28 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#6a7a8a',
     height: '100%',
+    position: 'relative',
   },
   cardSelected: {
     borderColor: '#4aca4a',
     backgroundColor: 'rgba(74, 202, 74, 0.15)',
+  },
+  cardLocked: {
+    opacity: 0.7,
+  },
+  tierBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    zIndex: 10,
+  },
+  tierText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   helperIconContainer: {
     alignItems: 'center',
@@ -340,6 +499,9 @@ const styles = StyleSheet.create({
   },
   helperIcon: {
     fontSize: 80,
+  },
+  lockedIcon: {
+    opacity: 0.3,
   },
   selectedBadge: {
     position: 'absolute',
@@ -359,12 +521,40 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
   },
+  lockBadge: {
+    position: 'absolute',
+    top: 10,
+    right: '30%',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  lockIcon: {
+    fontSize: 28,
+  },
   helperName: {
     color: 'white',
     fontSize: 24,
     fontWeight: 'bold',
     textAlign: 'center',
+    marginBottom: 4,
+  },
+  helperLevel: {
+    color: '#faca3a',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  helperDescription: {
+    color: '#ccc',
+    fontSize: 12,
+    textAlign: 'center',
     marginBottom: 10,
+    fontStyle: 'italic',
   },
   actionButton: {
     backgroundColor: '#4a9a4a',
@@ -378,6 +568,10 @@ const styles = StyleSheet.create({
   removeButton: {
     backgroundColor: '#ca4a4a',
     borderColor: '#da5a5a',
+  },
+  unlockButton: {
+    backgroundColor: '#faca3a',
+    borderColor: '#fada4a',
   },
   actionButtonText: {
     color: 'white',
@@ -426,8 +620,13 @@ const styles = StyleSheet.create({
   ratingValue: {
     fontSize: 11,
     fontWeight: 'bold',
-    width: 22,
+    width: 50,
     textAlign: 'right',
+  },
+  potentialRating: {
+    fontSize: 9,
+    color: '#9aaa9a',
+    fontWeight: 'normal',
   },
   indicators: {
     flexDirection: 'row',

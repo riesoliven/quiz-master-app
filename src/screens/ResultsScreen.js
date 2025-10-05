@@ -89,12 +89,13 @@ const ResultsScreen = ({ route, navigation }) => {
       const prevHighScore = await getUserHighScore(user.uid);
       setPreviousHighScore(prevHighScore);
 
-      // Check if this is a new high score
+      // Check if this is a new high score (including first-time players)
       const isNew = finalScore > prevHighScore;
       console.log('High Score Check:', {
         finalScore,
         prevHighScore,
-        isNewHighScore: isNew
+        isNewHighScore: isNew,
+        userId: user.uid
       });
       setIsNewHighScore(isNew);
 
@@ -177,16 +178,23 @@ const ResultsScreen = ({ route, navigation }) => {
       return;
     }
 
+    console.log('saveHighScore called - comment state:', comment);
+    console.log('saveHighScore called - isNewHighScore:', isNewHighScore);
+
     try {
       // Update the message if provided (score was already saved in loadHighScores)
       if (comment && comment.trim() !== '') {
-        await updateHighScore(
+        console.log('Saving message to Firestore:', comment.trim());
+        const result = await updateHighScore(
           user.uid,
           finalScore,
           comment.trim(),
           userProfile.username,
           userProfile.avatar
         );
+        console.log('updateHighScore result:', result);
+      } else {
+        console.log('No message provided, score already saved with empty message');
       }
 
       Alert.alert(

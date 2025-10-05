@@ -5,10 +5,12 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { getUserStats } from '../services/userStatsService';
+import { deleteUserAccount } from '../services/deleteAccountService';
 
 const ProfileScreen = ({ navigation }) => {
   const { user, userProfile } = useAuth();
@@ -42,6 +44,59 @@ const ProfileScreen = ({ navigation }) => {
     if (accuracy >= 60) return 'C';
     if (accuracy >= 50) return 'D';
     return 'F';
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      '⚠️ Delete Account',
+      'Are you sure you want to delete your account? This will permanently delete:\n\n• Your profile and progress\n• All statistics and scores\n• Leaderboard entries\n• All helper data\n\nThis action CANNOT be undone!',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Delete Forever',
+          style: 'destructive',
+          onPress: confirmDeleteAccount
+        }
+      ]
+    );
+  };
+
+  const confirmDeleteAccount = () => {
+    Alert.alert(
+      '🚨 Final Confirmation',
+      'Type your username to confirm deletion.\n\nThis is your LAST CHANCE to cancel!',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'I understand, delete my account',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await deleteUserAccount(user.uid);
+              Alert.alert(
+                'Account Deleted',
+                'Your account has been permanently deleted.',
+                [{ text: 'OK' }]
+              );
+              // Navigation will happen automatically when auth state changes
+            } catch (error) {
+              setLoading(false);
+              Alert.alert(
+                'Error',
+                'Failed to delete account: ' + error.message
+              );
+            }
+          }
+        }
+      ]
+    );
   };
 
   if (loading) {
@@ -165,6 +220,20 @@ const ProfileScreen = ({ navigation }) => {
             </View>
           ))
         )}
+      </View>
+
+      {/* Delete Account Button */}
+      <View style={styles.dangerZone}>
+        <Text style={styles.dangerZoneTitle}>⚠️ Danger Zone</Text>
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={handleDeleteAccount}
+        >
+          <Text style={styles.deleteButtonText}>🗑️ Delete Account</Text>
+        </TouchableOpacity>
+        <Text style={styles.dangerZoneHint}>
+          Permanently delete your account and all data
+        </Text>
       </View>
     </ScrollView>
   );
@@ -344,6 +413,41 @@ const styles = StyleSheet.create({
   accuracyFill: {
     height: '100%',
     borderRadius: 4,
+  },
+  dangerZone: {
+    margin: 20,
+    marginTop: 30,
+    marginBottom: 40,
+    backgroundColor: 'rgba(202, 74, 74, 0.1)',
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 2,
+    borderColor: '#ca4a4a',
+    alignItems: 'center',
+  },
+  dangerZoneTitle: {
+    color: '#ca4a4a',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 15,
+  },
+  deleteButton: {
+    backgroundColor: '#ca4a4a',
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  deleteButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  dangerZoneHint: {
+    color: '#ca8a8a',
+    fontSize: 12,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
 

@@ -14,6 +14,7 @@ import { getQuizQuestions } from '../services/questionService';
 import { calculateBonusPoints, getSubjectOfTheDay } from '../services/dailySubject';
 import { useAuth } from '../context/AuthContext';
 import { updateUserStats } from '../services/userStatsService';
+import { addHelperEXP } from '../services/helperService';
 
 // Shuffle answers while maintaining correct answer tracking
 const shuffleAnswers = (question) => {
@@ -256,6 +257,27 @@ const QuizGameScreen = ({ route, navigation }) => {
   // Update user stats with question results
   if (user && questionResults.length > 0) {
     await updateUserStats(user.uid, questionResults);
+  }
+
+  // Award helper EXP based on correct answers (2 EXP per correct answer)
+  if (user && helpers && correctAnswers > 0) {
+    const expPerCorrect = 2;
+    const totalExp = correctAnswers * expPerCorrect;
+
+    // Award EXP to all 3 helpers
+    const expResults = await Promise.all(
+      helpers.map(helper => addHelperEXP(user.uid, helper.id, totalExp))
+    );
+
+    // Check if any helpers leveled up
+    const leveledUpHelpers = expResults
+      .map((result, index) => ({ ...result, helper: helpers[index] }))
+      .filter(r => r.leveledUp);
+
+    if (leveledUpHelpers.length > 0) {
+      // Show level up notifications in Results screen
+      console.log('Helpers leveled up:', leveledUpHelpers);
+    }
   }
 
   setTimeout(() => {
